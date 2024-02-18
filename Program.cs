@@ -37,21 +37,18 @@ public partial class Program
 		}
     }
 
-	static async Task<bool> RunMainAsync(string[] args)
+	static bool RunMainAsync(string[] args)
 	{
 		if (args.Length < 2) return PrintSyntax();
 		switch (args[0])
 		{
 			case "on":
-				await RunServerOn(args.Skip(1), CancelTokenSource.Token);
-				break;
+				return RunServerOn(args.Skip(1), CancelTokenSource);
 			case "to":
-				await RunCopyTo(args.Skip(1));
-				break;
+				return RunCopyTo(args.Skip(1));
 			default:
 				return PrintSyntax();
 		}
-		return true;
 	}
 
 	static bool PrintSyntax()
@@ -74,7 +71,7 @@ public partial class Program
     RegexOptions.IgnoreCase)]
     private static partial Regex RegexPatternIpPort();
 
-	static (string Ip, int Port) ParseIpPort(string arg)
+	static (string Ip, int Port, IPAddress Address) ParseIpAddress(string arg)
 	{
         var regexIpPort = RegexPatternIpPort();
         var regServer = regexIpPort.Match(arg);
@@ -86,118 +83,124 @@ public partial class Program
         string portText = regServer.Groups["port"].Value;
         if (int.TryParse(portText, out var portNumber))
         {
-            return (ipText, portNumber);
+            if (IPAddress.TryParse(ipText, out var ipAddress))
+            {
+                return (ipText, portNumber, ipAddress);
+            }
+            throw new ArgumentException($"'{arg}' is NOT an valid address");
         }
         throw new ArgumentException($"'{portText}' is NOT valid a PORT number");
     }
 
-    static async Task RunServerOn(IEnumerable<string> mainArgs, CancellationToken cancelToken)
+    static bool RunServerOn(IEnumerable<string> mainArgs,
+        CancellationTokenSource cancelTokenSource)
 	{
 		var ipServerText = mainArgs.First();
-		var serverThe = ParseIpPort(ipServerText);
-		WriteLine($"Server will be created on {serverThe.Ip} at port {serverThe.Port}");
-
-		IPAddress ipAddress;
-		if (IPAddress.TryParse(serverThe.Ip, out var ipAddressTmp))
-		{
-			ipAddress = ipAddressTmp;
-		}
-		else
-		{
-            throw new ArgumentException($"'{serverThe.Ip}' is NOT valid a IP address.");
-        }
-
-		var ipEndPoint = new IPEndPoint(ipAddress, serverThe.Port);
-        var listener = new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+		var serverThe = ParseIpAddress(ipServerText);
+		var ipEndPoint = new IPEndPoint(serverThe.Address, serverThe.Port);
+        var listener = new TcpListener(ipEndPoint);
+        WriteLine($"Start listen on {serverThe.Ip} at port {serverThe.Port}");
+        listener.Start();
         CancelKeyPress += (_, e) =>
         {
             if (e.SpecialKey == ConsoleSpecialKey.ControlC
 			|| e.SpecialKey == ConsoleSpecialKey.ControlBreak)
 			{
                 Log("Ctrl-C is found");
-                listener.Shutdown(SocketShutdown.Both);
-                Log("Listener is shutdown");
-                Task.Delay(500);
-                listener.Close();
-                Log("Listener is closed");
-                Task.Delay(500);
+                cancelTokenSource.Cancel();
+                //Log("acceptCancel.Cancel() is called");
+                Task.Delay(1900).Wait();
             }
         };
-        listener.Bind(ipEndPoint);
-        listener.Listen(4);
 
-		var acceptArg = new SocketAsyncEventArgs();
-        acceptArg.Completed += (sender, e) =>
-		{
-			Log($"Completed");
-		};
+        Task.Run(async () =>
+        {
+            //Log($"Listener task start");
+            try
+            {
+                while (true)
+                {
+                    var clSocket = await listener.AcceptSocketAsync(cancelTokenSource.Token);
+                    var skClient = clSocket.RemoteEndPoint;
+                    //var epClient = clSocket.LocalEndPoint;
+                    //Log($"Accept <<< '{skClient}' to '{epClient}'");
+                    Log($"Accept '{skClient}'");
+                    _ = Task.Run(async () =>
+                    {
+                        var buf2 = new byte[4096];
+                        var cntRecv = await clSocket.ReceiveAsync(buf2, cancelTokenSource.Token);
+                        Log($"Recv {cntRecv} bytes");
+                        var recvText = Encoding.UTF8.GetString(buf2, 0, cntRecv);
+                        WriteLine($"Recv '{recvText}'");
+                        await Task.Delay(100);
+                        clSocket.Shutdown(SocketShutdown.Both);
+                        Log("Shutdown client");
+                        await Task.Delay(100);
+                        clSocket.Close();
+                        Log("Close client");
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Log("Listening is stopped");
+            }
+            catch (Exception ee)
+            {
+                Log("Accept: "+ ee.GetType().Name + ": " + ee.Message);
+            }
 
-		try
-		{
-            Log($"Accept >>>");
-            var recvSocket = listener.Accept();
-            Log($"Accept <<<");
-			// await listener.AcceptAsync(cancelToken);
-			var skClient = recvSocket.RemoteEndPoint;
-			var epClient = recvSocket.LocalEndPoint;
-			Log($"Accept '{skClient}' to '{epClient}'");
-            var buf2 = new byte[4096];
-            var cntRecv = await recvSocket.ReceiveAsync(buf2, cancelToken);
-            Log($"Accept {cntRecv} bytes");
-            var recvText = Encoding.UTF8.GetString(buf2, 0, cntRecv);
-            WriteLine($"Recv '{recvText}'");
-            await Task.Delay(500);
-			recvSocket.Shutdown(SocketShutdown.Both);
-            Log("Shutdown client");
-            await Task.Delay(500);
-			recvSocket.Close();
-            Log("Close client");
-            await Task.Delay(500);
-            Log("Listener is shutdown");
-            await Task.Delay(500);
-            listener.Close();
-            Log("Listener is closed");
-        }
-        catch (Exception ee)
-		{
-			Log(ee.Message);
-		}
+            try
+            {
+                await Task.Delay(20);
+                listener.Stop();
+                //Log($"Stop listener");
+                await Task.Delay(20);
+            }
+            catch (Exception ee)
+            {
+                Log(ee.GetType().Name + ": " + ee.Message);
+            }
+            //Log($"Listener task stopped");
+        }).Wait();
 
-        await Task.Delay(500);
-        Log($"Bye");
-
-        return;
+        //Log($"Bye >>>");
+        Task.Delay(20).Wait();
+        //Log($"Bye <<<");
+        return true;
 	}
 
-    static async Task RunCopyTo(IEnumerable<string> mainArgs)
+    static bool RunCopyTo(IEnumerable<string> mainArgs)
     {
-        var ipCopyTo = mainArgs.First();
-        var serverThe = ParseIpPort(ipCopyTo);
-        WriteLine($"To connect {serverThe.Ip} at port {serverThe.Port} ..");
-
-		using (var socket = new Socket(SocketType.Stream, ProtocolType.Tcp))
+        var ipCopyText = mainArgs.First();
+        var destThe = ParseIpAddress(ipCopyText);
+        var destEp = new IPEndPoint(destThe.Address, destThe.Port);
+        WriteLine($"To connect {destThe.Ip} at port {destThe.Port} ..");
+        using (var clientThe = new TcpClient())
 		{
-            socket.Connect(serverThe.Ip, serverThe.Port);
+            clientThe.Connect(destEp);
             Log("Connected");
 
             var demoBytes = Encoding.UTF8.GetBytes("Hi, how are you?");
 
-            var sentResult = socket.SendAsync(demoBytes, SocketFlags.None);
+            var sentResult = clientThe.Client.SendAsync(demoBytes, SocketFlags.None);
             sentResult.Wait();
             Log("Message sent");
             if (false == sentResult.IsCompleted || sentResult.Result != demoBytes.Length)
             {
-                WriteLine($"Sent (completed:{sentResult.IsCompleted}), want={demoBytes.Length} but real={sentResult.Result}");
-                return;
+                Write($"Sent (result:{sentResult.IsCompleted}),");
+                Write($" want={demoBytes.Length} but real={sentResult.Result}");
+                WriteLine();
+                return false;
             }
-            await Task.Delay(500);
-            socket.Shutdown(SocketShutdown.Both);
+            Task.Delay(50).Wait();
+            clientThe.Client.Shutdown(SocketShutdown.Both);
             Log("Connection is shutdown");
-            await Task.Delay(500);
-            socket.Close();
+            Task.Delay(50).Wait();
+            clientThe.Client.Close();
             Log("Connection is closed");
-            await Task.Delay(500);
+            Task.Delay(20).Wait();
         }
-        return;
+        return true;
     }
 }
