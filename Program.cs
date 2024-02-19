@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Net.Sockets;
+using System.Numerics;
 using System.Text;
 using System.Text.RegularExpressions;
 using static System.Console;
@@ -71,7 +72,7 @@ public partial class Program
     RegexOptions.IgnoreCase)]
     private static partial Regex RegexPatternIpPort();
 
-	static (string Ip, int Port, IPAddress Address) ParseIpAddress(string arg)
+	static (string Ip, int Port, IPEndPoint EndPoint) ParseIpEndpoint(string arg)
 	{
         var regexIpPort = RegexPatternIpPort();
         var regServer = regexIpPort.Match(arg);
@@ -85,7 +86,7 @@ public partial class Program
         {
             if (IPAddress.TryParse(ipText, out var ipAddress))
             {
-                return (ipText, portNumber, ipAddress);
+                return (ipText, portNumber, new IPEndPoint(ipAddress, portNumber));
             }
             throw new ArgumentException($"'{arg}' is NOT an valid address");
         }
@@ -96,10 +97,9 @@ public partial class Program
         CancellationTokenSource cancelTokenSource)
 	{
 		var ipServerText = mainArgs.First();
-		var serverThe = ParseIpAddress(ipServerText);
-		var ipEndPoint = new IPEndPoint(serverThe.Address, serverThe.Port);
-        var listener = new TcpListener(ipEndPoint);
-        WriteLine($"Start listen on {serverThe.Ip} at port {serverThe.Port}");
+		var serverThe = ParseIpEndpoint(ipServerText);
+        var listener = new TcpListener(serverThe.EndPoint);
+        Log($"Start listen on {serverThe.Ip} at port {serverThe.Port}");
         listener.Start();
         CancelKeyPress += (_, e) =>
         {
@@ -108,27 +108,29 @@ public partial class Program
 			{
                 Log("Ctrl-C is found");
                 cancelTokenSource.Cancel();
-                //Log("acceptCancel.Cancel() is called");
-                Task.Delay(1900).Wait();
+                Task.Delay(900).Wait();
             }
         };
 
         Task.Run(async () =>
         {
-            //Log($"Listener task start");
             try
             {
+                int cntRecv = 0;
+                int sizeWant = 0;
+                var sizeBytes = new byte[4];
                 while (true)
                 {
                     var clSocket = await listener.AcceptSocketAsync(cancelTokenSource.Token);
                     var skClient = clSocket.RemoteEndPoint;
-                    //var epClient = clSocket.LocalEndPoint;
-                    //Log($"Accept <<< '{skClient}' to '{epClient}'");
                     Log($"Accept '{skClient}'");
                     _ = Task.Run(async () =>
                     {
+                        cntRecv = await clSocket.ReceiveAsync(sizeBytes, cancelTokenSource.Token);
+                        sizeWant = sizeBytes.ToInt();
+                        Log($"Read sizeBytes:{cntRecv}b => msgSize:{sizeWant}");
                         var buf2 = new byte[4096];
-                        var cntRecv = await clSocket.ReceiveAsync(buf2, cancelTokenSource.Token);
+                        cntRecv = await clSocket.ReceiveAsync(buf2, cancelTokenSource.Token);
                         Log($"Recv {cntRecv} bytes");
                         var recvText = Encoding.UTF8.GetString(buf2, 0, cntRecv);
                         WriteLine($"Recv '{recvText}'");
@@ -154,34 +156,33 @@ public partial class Program
             {
                 await Task.Delay(20);
                 listener.Stop();
-                //Log($"Stop listener");
                 await Task.Delay(20);
             }
             catch (Exception ee)
             {
                 Log(ee.GetType().Name + ": " + ee.Message);
             }
-            //Log($"Listener task stopped");
         }).Wait();
 
-        //Log($"Bye >>>");
         Task.Delay(20).Wait();
-        //Log($"Bye <<<");
         return true;
 	}
 
     static bool RunCopyTo(IEnumerable<string> mainArgs)
     {
         var ipCopyText = mainArgs.First();
-        var destThe = ParseIpAddress(ipCopyText);
-        var destEp = new IPEndPoint(destThe.Address, destThe.Port);
-        WriteLine($"To connect {destThe.Ip} at port {destThe.Port} ..");
+        var destThe = ParseIpEndpoint(ipCopyText);
+        Log($"Connect {destThe.Ip} at port {destThe.Port} ..");
+        var sizeBytes = new byte[4];
         using (var clientThe = new TcpClient())
 		{
-            clientThe.Connect(destEp);
+            clientThe.Connect(destThe.EndPoint);
             Log("Connected");
 
             var demoBytes = Encoding.UTF8.GetBytes("Hi, how are you?");
+
+            sizeBytes.FromInt(demoBytes.Length);
+            clientThe.Client.SendAsync(sizeBytes, SocketFlags.None);
 
             var sentResult = clientThe.Client.SendAsync(demoBytes, SocketFlags.None);
             sentResult.Wait();
@@ -202,5 +203,38 @@ public partial class Program
             Task.Delay(20).Wait();
         }
         return true;
+    }
+}
+
+static class Helper
+{
+    public static void FromInt(this byte[] bytes, int value)
+    {
+        bytes[0] = (byte)(value & 0xFF);
+        value >>= 8;
+        bytes[1] = (byte)(value & 0xFF);
+        value >>= 8;
+        bytes[2] = (byte)(value & 0xFF);
+        value >>= 8;
+        bytes[3] = (byte)(value & 0xFF);
+    }
+
+    public static int ToInt(this byte[] bytes)
+    {
+        int rtn = bytes[3];
+        rtn <<= 8; rtn += bytes[2];
+        rtn <<= 8; rtn += bytes[1];
+        rtn <<= 8; rtn += bytes[0];
+        return rtn;
+    }
+
+    public static string ToHex(this byte[] bytes)
+    {
+        var rtn = new StringBuilder();
+        rtn.Append($"{bytes[0]:x2}");
+        rtn.Append($".{bytes[1]:x2}");
+        rtn.Append($".{bytes[2]:x2}");
+        rtn.Append($".{bytes[3]:x2}");
+        return rtn.ToString();
     }
 }
