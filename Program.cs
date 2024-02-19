@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System;
+using System.Net;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Text;
@@ -46,7 +47,9 @@ public partial class Program
 			case "on":
 				return RunServerOn(args.Skip(1), CancelTokenSource);
 			case "to":
-				return RunCopyTo(args.Skip(1));
+				var taskResult = RunCopyTo(args.Skip(1), CancelTokenSource);
+                taskResult.Wait();
+                return taskResult.Result;
 			default:
 				return PrintSyntax();
 		}
@@ -72,7 +75,7 @@ public partial class Program
     RegexOptions.IgnoreCase)]
     private static partial Regex RegexPatternIpPort();
 
-	static (string Ip, int Port, IPEndPoint EndPoint) ParseIpEndpoint(string arg)
+	static IPEndPoint ParseIpEndpoint(string arg)
 	{
         var regexIpPort = RegexPatternIpPort();
         var regServer = regexIpPort.Match(arg);
@@ -86,7 +89,7 @@ public partial class Program
         {
             if (IPAddress.TryParse(ipText, out var ipAddress))
             {
-                return (ipText, portNumber, new IPEndPoint(ipAddress, portNumber));
+                return new IPEndPoint(ipAddress, portNumber);
             }
             throw new ArgumentException($"'{arg}' is NOT an valid address");
         }
@@ -97,9 +100,9 @@ public partial class Program
         CancellationTokenSource cancelTokenSource)
 	{
 		var ipServerText = mainArgs.First();
-		var serverThe = ParseIpEndpoint(ipServerText);
-        var listener = new TcpListener(serverThe.EndPoint);
-        Log($"Start listen on {serverThe.Ip} at port {serverThe.Port}");
+		var endPointThe = ParseIpEndpoint(ipServerText);
+        var listener = new TcpListener(endPointThe);
+        Log($"Start listen on {endPointThe.Address} at port {endPointThe.Port}");
         listener.Start();
         CancelKeyPress += (_, e) =>
         {
@@ -112,34 +115,51 @@ public partial class Program
             }
         };
 
+        WriteLine("Press Ctrl-C to break.");
+
         Task.Run(async () =>
         {
             try
             {
-                int cntRecv = 0;
-                int sizeWant = 0;
-                var sizeBytes = new byte[4];
                 while (true)
                 {
                     var clSocket = await listener.AcceptSocketAsync(cancelTokenSource.Token);
                     var skClient = clSocket.RemoteEndPoint;
-                    Log($"Accept '{skClient}'");
+                    Log($"From '{skClient}'");
                     _ = Task.Run(async () =>
                     {
-                        cntRecv = await clSocket.ReceiveAsync(sizeBytes, cancelTokenSource.Token);
-                        sizeWant = sizeBytes.ToInt();
-                        Log($"Read sizeBytes:{cntRecv}b => msgSize:{sizeWant}");
+                        int cntRecv = 0;
+                        UInt16 sizeWant = 0;
+                        var sizeByte2 = new byte[2];
                         var buf2 = new byte[4096];
-                        cntRecv = await clSocket.ReceiveAsync(buf2, cancelTokenSource.Token);
-                        Log($"Recv {cntRecv} bytes");
-                        var recvText = Encoding.UTF8.GetString(buf2, 0, cntRecv);
-                        WriteLine($"Recv '{recvText}'");
-                        await Task.Delay(100);
-                        clSocket.Shutdown(SocketShutdown.Both);
-                        Log("Shutdown client");
-                        await Task.Delay(100);
-                        clSocket.Close();
-                        Log("Close client");
+                        (var socketThe, var clientThe) = (clSocket,  skClient);
+                        try
+                        {
+                            while (true)
+                            {
+                                cntRecv = await socketThe.ReceiveAsync(sizeByte2, cancelTokenSource.Token);
+                                if (cntRecv == 0) break;
+                                sizeWant = sizeByte2.ToUInt16();
+                                Log($"Read sizeByte2:{cntRecv}b => msgSize:{sizeWant}");
+                                var buf3 = new ArraySegment<byte>(buf2, 0, sizeWant);
+                                cntRecv = await socketThe.ReceiveAsync(buf3, cancelTokenSource.Token);
+                                Log($"Recv {cntRecv} bytes");
+                                var recvText = Encoding.UTF8.GetString(buf2, 0, cntRecv);
+                                Log($"Recv '{recvText}' from '{clientThe}'");
+
+                                sizeByte2.FromUInt16(0);
+                                await socketThe.SendAsync(sizeByte2, SocketFlags.None);
+                            }
+                            await Task.Delay(20);
+                            socketThe.Shutdown(SocketShutdown.Both);
+                            await Task.Delay(20);
+                            socketThe.Close();
+                            Log($"'{clientThe}' dropped");
+                        }
+                        catch (Exception ee)
+                        {
+                            Log($"'{clientThe}' {ee}");
+                        }
                     });
                 }
             }
@@ -168,37 +188,91 @@ public partial class Program
         return true;
 	}
 
-    static bool RunCopyTo(IEnumerable<string> mainArgs)
+    static async Task<bool> RunCopyTo(IEnumerable<string> mainArgs, CancellationTokenSource cancelTokenSource)
     {
-        var ipCopyText = mainArgs.First();
-        var destThe = ParseIpEndpoint(ipCopyText);
-        Log($"Connect {destThe.Ip} at port {destThe.Port} ..");
-        var sizeBytes = new byte[4];
-        using (var clientThe = new TcpClient())
-		{
-            clientThe.Connect(destThe.EndPoint);
-            Log("Connected");
-
-            var demoBytes = Encoding.UTF8.GetBytes("Hi, how are you?");
-
-            sizeBytes.FromInt(demoBytes.Length);
-            clientThe.Client.SendAsync(sizeBytes, SocketFlags.None);
-
-            var sentResult = clientThe.Client.SendAsync(demoBytes, SocketFlags.None);
-            sentResult.Wait();
-            Log("Message sent");
-            if (false == sentResult.IsCompleted || sentResult.Result != demoBytes.Length)
+        var sizeByte2 = new byte[2];
+        async Task<int> SendMesssage(Socket socket, string message)
+        {
+            var buf2 = Encoding.UTF8.GetBytes(message);
+            sizeByte2.FromUInt16((UInt16)buf2.Length);
+            int sizeTxfr = await socket.SendAsync(sizeByte2, SocketFlags.None);
+            if (sizeTxfr != sizeByte2.Length)
             {
-                Write($"Sent (result:{sentResult.IsCompleted}),");
-                Write($" want={demoBytes.Length} but real={sentResult.Result}");
+                Write($"Sent size error!,");
+                Write($" want={sizeByte2.Length} but real={sizeTxfr}");
                 WriteLine();
+                return -1;
+            }
+
+            sizeTxfr = await socket.SendAsync(buf2, SocketFlags.None);
+            if (sizeTxfr != buf2.Length)
+            {
+                Write($"Sent message error!,");
+                Write($" want={buf2.Length} but real={sizeTxfr}");
+                WriteLine();
+                return -1;
+            }
+            sizeTxfr = await socket.ReceiveAsync(sizeByte2, cancelTokenSource.Token);
+            if (sizeTxfr != sizeByte2.Length)
+            {
+                Write($"Recv error!,");
+                Write($" want={sizeByte2.Length} but real={sizeTxfr}");
+                WriteLine();
+                return -1;
+            }
+
+            return sizeByte2.ToUInt16();
+        }
+
+        var ipCopyText = mainArgs.First();
+        var endPointThe = ParseIpEndpoint(ipCopyText);
+        var connectTimeout = new CancellationTokenSource(millisecondsDelay: 3000);
+        Log($"Connect {endPointThe.Address} at port {endPointThe.Port} ..");
+        using (var serverThe = new TcpClient())
+		{
+            try
+            {
+                await serverThe.ConnectAsync(endPointThe, connectTimeout.Token);
+                Log("Connected");
+            }
+            catch (Exception ee)
+            {
+                Log($"Connect failed! {ee.Message}");
                 return false;
             }
-            Task.Delay(50).Wait();
-            clientThe.Client.Shutdown(SocketShutdown.Both);
+
+            var socketThe = serverThe.Client;
+            try
+            {
+
+                int rsp = 0;
+                foreach (var msg in new string[]
+                {
+                    "Hi, how are you?",
+                    "Very good!"
+                })
+                {
+                    rsp = await SendMesssage(socketThe, msg);
+                    if (rsp != 0)
+                    {
+                        WriteLine($"Recv unknown response {rsp}");
+                        break;
+                    }
+                }
+            }
+            catch (SocketException se)
+            {
+                Log($"Socket Error! {se.Message}");
+            }
+            catch (Exception ee)
+            {
+                Log($"Error! {ee}");
+            }
+
+            serverThe.Client.Shutdown(SocketShutdown.Both);
             Log("Connection is shutdown");
             Task.Delay(50).Wait();
-            clientThe.Client.Close();
+            serverThe.Client.Close();
             Log("Connection is closed");
             Task.Delay(20).Wait();
         }
@@ -208,33 +282,26 @@ public partial class Program
 
 static class Helper
 {
-    public static void FromInt(this byte[] bytes, int value)
+    public static void FromUInt16(this byte[] bytes, UInt16 value)
     {
         bytes[0] = (byte)(value & 0xFF);
         value >>= 8;
-        bytes[1] = (byte)(value & 0xFF);
-        value >>= 8;
-        bytes[2] = (byte)(value & 0xFF);
-        value >>= 8;
-        bytes[3] = (byte)(value & 0xFF);
+        bytes[1] = (byte)value;
     }
 
-    public static int ToInt(this byte[] bytes)
+    public static UInt16 ToUInt16(this byte[] bytes)
     {
-        int rtn = bytes[3];
-        rtn <<= 8; rtn += bytes[2];
-        rtn <<= 8; rtn += bytes[1];
-        rtn <<= 8; rtn += bytes[0];
+        UInt16 rtn = bytes[1];
+        rtn <<= 8;
+        rtn += bytes[0];
         return rtn;
     }
 
-    public static string ToHex(this byte[] bytes)
+    public static string ToHexDigit(this byte[] bytes)
     {
         var rtn = new StringBuilder();
         rtn.Append($"{bytes[0]:x2}");
         rtn.Append($".{bytes[1]:x2}");
-        rtn.Append($".{bytes[2]:x2}");
-        rtn.Append($".{bytes[3]:x2}");
         return rtn.ToString();
     }
 }
