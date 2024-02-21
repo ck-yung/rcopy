@@ -1,7 +1,5 @@
-﻿using System;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
-using System.Numerics;
 using System.Text;
 using System.Text.RegularExpressions;
 using static System.Console;
@@ -125,9 +123,8 @@ public partial class Program
             if (e.SpecialKey == ConsoleSpecialKey.ControlC
 			|| e.SpecialKey == ConsoleSpecialKey.ControlBreak)
 			{
-                Log("Ctrl-C is found");
                 cancelTokenSource.Cancel();
-                Task.Delay(900).Wait();
+                Task.Delay(100).Wait();
             }
         };
 
@@ -147,12 +144,13 @@ public partial class Program
                         var socketThe = socketQueue.Get();
                         if (socketThe == null)
                         {
-                            Log("No client connection is found!");
+                            Log("Error! No client connection is found!");
                             return;
                         }
                         var remoteEndPoint = socketThe.RemoteEndPoint;
                         Log($"Connected from '{remoteEndPoint}'");
 
+                        bool statusTxfr = false;
                         int cntTxfr = 0;
                         UInt16 sizeWant = 0;
                         var sizeThe = new Byte2();
@@ -161,19 +159,28 @@ public partial class Program
                         {
                             while (true)
                             {
-                                cntTxfr = await socketThe.ReceiveAsync(sizeThe.Data, cancelTokenSource.Token);
-                                if (cntTxfr != sizeThe.Length) break;
-                                sizeWant = sizeThe.Value();
-                                Log($"Read msgSize:{sizeWant}");
+                                (statusTxfr, sizeWant) = await sizeThe.Receive(socketThe,
+                                    cancelTokenSource.Token);
+                                if ((false == statusTxfr) || (sizeWant == 0))
+                                {
+                                    break;
+                                }
+
+                                System.Diagnostics.Debug.WriteLine(
+                                    $"Read msgSize:{sizeWant}");
                                 var buf3 = new ArraySegment<byte>(buf2, 0, sizeWant);
                                 cntTxfr = await socketThe.ReceiveAsync(buf3, cancelTokenSource.Token);
-                                Log($"Recv {cntTxfr} bytes");
+                                System.Diagnostics.Debug.WriteLine(
+                                    $"{DateTime.Now.ToString("s")} Recv {cntTxfr} bytes");
                                 var recvText = Encoding.UTF8.GetString(buf2, 0, cntTxfr);
-                                Log($"Recv '{recvText}' from '{remoteEndPoint}'");
+                                Log($"{DateTime.Now.ToString("s")} Recv '{recvText}' from '{remoteEndPoint}'");
 
                                 sizeThe.From(0);
-                                cntTxfr = await socketThe.SendAsync(sizeThe.Data, SocketFlags.None);
-                                if (cntTxfr != sizeThe.Data.Length) break;
+                                if (false == await sizeThe.Send(socketThe, cancelTokenSource.Token))
+                                {
+                                    Log($"Fail to send response");
+                                    break;
+                                }
                             }
                             await Task.Delay(20);
                             socketThe.Shutdown(SocketShutdown.Both);
@@ -216,19 +223,18 @@ public partial class Program
     static async Task<bool> RunCopyTo(IEnumerable<string> mainArgs, CancellationTokenSource cancelTokenSource)
     {
         int cntTxfr = 0;
-        //UInt16 sizeWant = 0;
+        bool statusTxfr = false;
+        UInt16 response = 0;
         var sizeThe = new Byte2();
         var buf2 = new byte[4096];
         async Task<int> SendMesssage(Socket socket, string message)
         {
             var buf2 = Encoding.UTF8.GetBytes(message);
+
             sizeThe.From(buf2.Length);
-            cntTxfr = await socket.SendAsync(sizeThe.Data, SocketFlags.None);
-            if (cntTxfr != sizeThe.Length)
+            if (false == await sizeThe.Send(socket, cancelTokenSource.Token))
             {
-                Write($"Sent header error!,");
-                Write($" want={sizeThe.Length} but real={cntTxfr}");
-                WriteLine();
+                Log($"Fail to send msg-size");
                 return -1;
             }
 
@@ -241,14 +247,14 @@ public partial class Program
                 return -1;
             }
 
-            cntTxfr = await socket.ReceiveAsync(sizeThe.Data, cancelTokenSource.Token);
-            if (cntTxfr != sizeThe.Length)
+            (statusTxfr, response) = await sizeThe.Receive(socket,
+                cancelTokenSource.Token);
+            if (false == statusTxfr)
             {
-                Write($"Recv error!,");
-                Write($" want={sizeThe.Length} but real={cntTxfr}");
-                WriteLine();
+                Log($"Fail to read response");
                 return -1;
             }
+            // TODO: Check if reponse is ZERO
 
             return sizeThe.Value();
         }
@@ -275,7 +281,7 @@ public partial class Program
             {
 
                 int rsp = 0;
-                foreach (var msg in mainArgs.Union(["Bye!"]))
+                foreach (var msg in mainArgs.Skip(1).Union(["Bye!"]))
                 {
                     rsp = await SendMesssage(socketThe, msg);
                     if (rsp != 0)

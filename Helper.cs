@@ -1,12 +1,11 @@
-﻿using System.Collections.Generic;
-using System.Net.Sockets;
+﻿using System.Net.Sockets;
 using System.Text;
 
 namespace rcopy2;
 
 sealed class Byte2
 {
-    public readonly int Length = 2;
+    public const int Length = 2;
     public readonly byte[] Data = new byte[2];
 
     public void From(UInt16 uint16)
@@ -34,6 +33,43 @@ sealed class Byte2
         rtn <<= 8;
         rtn += Data[0];
         return rtn;
+    }
+
+    public async Task<(bool Status, UInt16 Result)> Receive(
+        Socket socket, CancellationToken cancellation)
+    {
+        int cntTxfr = await socket.ReceiveAsync(Data, cancellation);
+        switch (cntTxfr)
+        {
+            case Length:
+                return (true, Value());
+            case 1:
+                cntTxfr = socket.Receive(Data, offset: 1, size: 1,
+                    socketFlags: SocketFlags.None);
+                if (1 == cntTxfr) return(true, Value());
+                break;
+            default:
+                break;
+        }
+        return (false, 0);
+    }
+
+    public async Task<bool> Send(Socket socket, CancellationToken cancellation)
+    {
+        int cntTxfr = await socket.SendAsync(Data, cancellation);
+        switch (cntTxfr)
+        {
+            case Length:
+                return true;
+            case 1:
+                cntTxfr = socket.Send(Data, offset: 1, size: 1,
+                    socketFlags: SocketFlags.None);
+                if (1 == cntTxfr) return true;
+                break;
+            default:
+                break;
+        }
+        return false;
     }
 }
 
