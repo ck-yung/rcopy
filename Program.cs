@@ -71,29 +71,45 @@ public partial class Program
 	}
 
     [GeneratedRegex(
-    @"^(?<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(?<port>\d{1,5})$",
-    RegexOptions.IgnoreCase)]
+    @"^(?<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(?<port>\d{1,5})$")]
     private static partial Regex RegexPatternIpPort();
 
-	static IPEndPoint ParseIpEndpoint(string arg)
+    [GeneratedRegex(@"^(?<host>[\D][^\s].*):(?<port>\d{1,5})$")]
+    private static partial Regex RegexPatternHostPort();
+
+    static IPEndPoint ParseIpEndpoint(string arg)
 	{
-        var regexIpPort = RegexPatternIpPort();
-        var regServer = regexIpPort.Match(arg);
-        if (false == regServer.Success)
+        var regServer = RegexPatternIpPort().Match(arg);
+        if (true == regServer.Success)
         {
-			throw new ArgumentException($"'{arg}' is NOT in valid IP:PORT format");
-        }
-        string ipText = regServer.Groups["ip"].Value;
-        string portText = regServer.Groups["port"].Value;
-        if (int.TryParse(portText, out var portNumber))
-        {
-            if (IPAddress.TryParse(ipText, out var ipAddress))
+            string ipText = regServer.Groups["ip"].Value;
+            string portText = regServer.Groups["port"].Value;
+            if (int.TryParse(portText, out var portNumber))
             {
-                return new IPEndPoint(ipAddress, portNumber);
+                if (IPAddress.TryParse(ipText, out var ipAddress))
+                {
+                    return new IPEndPoint(ipAddress, portNumber);
+                }
+                throw new ArgumentException($"'{arg}' is NOT an valid address");
             }
-            throw new ArgumentException($"'{arg}' is NOT an valid address");
+            throw new ArgumentException($"'{portText}' is NOT valid a PORT number");
         }
-        throw new ArgumentException($"'{portText}' is NOT valid a PORT number");
+
+        regServer = RegexPatternHostPort().Match(arg);
+        if (true == regServer.Success)
+        {
+            string hostName = regServer.Groups["host"].Value;
+            string portText = regServer.Groups["port"].Value;
+            var hostAddress = Dns.GetHostAddresses(hostName)
+                .First() ?? IPAddress.None;
+            if (int.TryParse(portText, out var portNumber))
+            {
+                return new IPEndPoint(hostAddress, portNumber);
+            }
+            throw new ArgumentException($"'{portText}' is NOT valid a PORT number");
+        }
+
+        throw new ArgumentException($"'{arg}' is NOT in valid IP:PORT format");
     }
 
     static bool RunServerOn(IEnumerable<string> mainArgs,
