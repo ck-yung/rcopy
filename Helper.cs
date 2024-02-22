@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 namespace rcopy2;
 
 record Info(string Name, FileInfo File);
+
 sealed class Byte2
 {
     public const int Length = 2;
@@ -157,27 +158,23 @@ sealed class Byte16
     public async Task<(bool Status, long Result)> Receive(
     Socket socket, CancellationToken cancellation)
     {
-        int cntTxfr = await socket.ReceiveAsync(Data, cancellation);
-        switch (cntTxfr)
+        int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
+        if (cntTxfr == Length)
         {
-            case 0:
-                return (false, 0);
-            case 16:
-                return (true, Value());
-            case 1: // TODO ..
-                cntTxfr = socket.Receive(Data, offset: 1, size: 15,
-                    socketFlags: SocketFlags.None);
-                if (15 == cntTxfr) return (true, Value());
-                break;
-            default:
-                Console.WriteLine($"TODO: Byte16 recv {cntTxfr}b!!!!");
-                break;
+            return (true, Value());
         }
         return (false, 0);
     }
 
     public async Task<bool> Send(Socket socket, CancellationToken cancellation)
     {
+        int cntTxfr = 0;
+        cntTxfr = socket.Send(Data, offset: 0, size: 8, socketFlags: SocketFlags.None);
+        if (cntTxfr != 8) return false;
+        await Task.Delay(2000);
+        cntTxfr = socket.Send(Data, offset: 8, size: 8, socketFlags: SocketFlags.None);
+        if (cntTxfr != 8) return false;
+        /*
         int cntTxfr = await socket.SendAsync(Data, cancellation);
         switch (cntTxfr)
         {
@@ -194,7 +191,8 @@ sealed class Byte16
                 Console.WriteLine($"TODO: Byte16 send {cntTxfr}b!");
                 break;
         }
-        return false;
+        */
+        return true;
     }
 }
 
@@ -223,6 +221,7 @@ sealed class ClientQueue
 static partial class Helper
 {
     public const int InitBufferSize = 16 * 1024;
+
     public static void Log(string message)
     {
         Console.WriteLine(
@@ -287,5 +286,25 @@ static partial class Helper
             rtn.Append($".{bytes[ii]:x2}");
         }
         return rtn.ToString();
+    }
+
+    public static async Task<int> Recv(Socket socket,
+        byte[] data, int wantSize, CancellationToken token)
+    {
+        int rtn = 0;
+        int offset = 0;
+        int cntTxfr;
+        Memory<byte> buffer;
+        while (0 < wantSize)
+        {
+            buffer = new Memory<byte>(data, start: offset, length: wantSize);
+            cntTxfr = await socket.ReceiveAsync(buffer, token);
+            Log($"Recv {cntTxfr}b from offset:{offset}, want:{wantSize}");
+            if (cntTxfr < 1) break;
+            rtn += cntTxfr;
+            offset += cntTxfr;
+            wantSize -= cntTxfr;
+        }
+        return rtn;
     }
 }
