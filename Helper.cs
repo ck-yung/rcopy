@@ -1,5 +1,7 @@
-﻿using System.Net.Sockets;
+﻿using System.Net;
+using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace rcopy2;
 
@@ -141,28 +143,71 @@ sealed class ClientQueue
     }
 }
 
-static class Helper
+static partial class Helper
 {
-    public static void FromUInt16(this byte[] bytes, UInt16 value)
+    public static void Log(string message)
     {
-        bytes[0] = (byte)(value & 0xFF);
-        value >>= 8;
-        bytes[1] = (byte)value;
+        Console.WriteLine(
+            $"{DateTime.Now.ToString("s")} {message}");
     }
 
-    public static UInt16 ToUInt16(this byte[] bytes)
+    public static void ErrorLog(string message)
     {
-        UInt16 rtn = bytes[1];
-        rtn <<= 8;
-        rtn += bytes[0];
-        return rtn;
+        Console.Error.WriteLine(
+            $"{DateTime.Now.ToString("s")} {message}");
+    }
+
+    [GeneratedRegex(
+    @"^(?<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(?<port>\d{1,5})$")]
+    private static partial Regex RegexPatternIpPort();
+
+    [GeneratedRegex(@"^(?<host>[\D][^\s].*):(?<port>\d{1,5})$")]
+    private static partial Regex RegexPatternHostPort();
+
+    public static IPEndPoint ParseIpEndpoint(string arg)
+    {
+        var regServer = RegexPatternIpPort().Match(arg);
+        if (true == regServer.Success)
+        {
+            string ipText = regServer.Groups["ip"].Value;
+            string portText = regServer.Groups["port"].Value;
+            if (int.TryParse(portText, out var portNumber))
+            {
+                if (IPAddress.TryParse(ipText, out var ipAddress))
+                {
+                    return new IPEndPoint(ipAddress, portNumber);
+                }
+                throw new ArgumentException($"'{arg}' is NOT an valid address");
+            }
+            throw new ArgumentException($"'{portText}' is NOT valid a PORT number");
+        }
+
+        regServer = RegexPatternHostPort().Match(arg);
+        if (true == regServer.Success)
+        {
+            string hostName = regServer.Groups["host"].Value;
+            string portText = regServer.Groups["port"].Value;
+            var hostAddress = Dns.GetHostAddresses(hostName)
+                .First() ?? IPAddress.None;
+            if (int.TryParse(portText, out var portNumber))
+            {
+                return new IPEndPoint(hostAddress, portNumber);
+            }
+            throw new ArgumentException($"'{portText}' is NOT valid a PORT number");
+        }
+
+        throw new ArgumentException($"'{arg}' is NOT in valid IP:PORT format");
     }
 
     public static string ToHexDigit(this byte[] bytes)
     {
+        var length = int.Min(bytes.Length, 8);
         var rtn = new StringBuilder();
         rtn.Append($"{bytes[0]:x2}");
-        rtn.Append($".{bytes[1]:x2}");
+        for ( int ii = 1; ii < length; ii+=1)
+        {
+            rtn.Append($".{bytes[ii]:x2}");
+        }
         return rtn.ToString();
     }
 }
