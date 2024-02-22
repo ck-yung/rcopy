@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace rcopy2;
 
+record Info(string Name, FileInfo File);
 sealed class Byte2
 {
     public const int Length = 2;
@@ -17,7 +18,7 @@ sealed class Byte2
         Data[1] = (byte)(uint16 & 0xFF);
     }
 
-    public void From(int value)
+    public Byte2 From(int value)
     {
         if (value > UInt16.MaxValue)
         {
@@ -27,6 +28,7 @@ sealed class Byte2
         Data[0] = (byte)(uint16 & 0xFF);
         uint16 >>= 8;
         Data[1] = (byte)(uint16 & 0xFF);
+        return this;
     }
 
     public UInt16 Value()
@@ -43,6 +45,8 @@ sealed class Byte2
         int cntTxfr = await socket.ReceiveAsync(Data, cancellation);
         switch (cntTxfr)
         {
+            case 0:
+                return (false, 0);
             case Length:
                 return (true, Value());
             case 1:
@@ -61,6 +65,8 @@ sealed class Byte2
         int cntTxfr = await socket.SendAsync(Data, cancellation);
         switch (cntTxfr)
         {
+            case 0:
+                return false;
             case Length:
                 return true;
             case 1:
@@ -80,7 +86,7 @@ sealed class Byte8
     public readonly int Length = 8;
     public readonly byte[] Data = new byte[8];
 
-    public void From(long value)
+    public Byte8 From(int value)
     {
         Data[0] = (byte)(value & 0xFF);
         value >>= 8;
@@ -97,11 +103,12 @@ sealed class Byte8
         Data[6] = (byte)(value & 0xFF);
         value >>= 8;
         Data[7] = (byte)(value & 0xFF);
+        return this;
     }
 
-    public long Value()
+    public int Value()
     {
-        long rtn = Data[7];
+        int rtn = Data[7];
         rtn <<= 8;
         rtn += Data[6];
         rtn <<= 8;
@@ -120,14 +127,84 @@ sealed class Byte8
     }
 }
 
+sealed class Byte16
+{
+    public readonly int Length = 16;
+    public readonly byte[] Data = new byte[16];
+
+    public Byte16 From(long value)
+    {
+        Data[0] = (byte)(value & 0xFF);
+        for (int ii = 1; ii < 16; ii += 1)
+        {
+            value >>= 8;
+            Data[ii] = (byte)(value & 0xFF);
+        }
+        return this;
+    }
+
+    public long Value()
+    {
+        long rtn = Data[15];
+        for (int ii = 14; 0 <= ii; ii -=1)
+        {
+            rtn <<= 8;
+            rtn += Data[ii];
+        }
+        return rtn;
+    }
+
+    public async Task<(bool Status, long Result)> Receive(
+    Socket socket, CancellationToken cancellation)
+    {
+        int cntTxfr = await socket.ReceiveAsync(Data, cancellation);
+        switch (cntTxfr)
+        {
+            case 0:
+                return (false, 0);
+            case 16:
+                return (true, Value());
+            case 1: // TODO ..
+                cntTxfr = socket.Receive(Data, offset: 1, size: 15,
+                    socketFlags: SocketFlags.None);
+                if (15 == cntTxfr) return (true, Value());
+                break;
+            default:
+                Console.WriteLine($"TODO: Byte16 recv {cntTxfr}b!!!!");
+                break;
+        }
+        return (false, 0);
+    }
+
+    public async Task<bool> Send(Socket socket, CancellationToken cancellation)
+    {
+        int cntTxfr = await socket.SendAsync(Data, cancellation);
+        switch (cntTxfr)
+        {
+            case 0:
+                return false;
+            case 16: // ??? TODO const readonly
+                return true;
+            case 1:
+                cntTxfr = socket.Send(Data, offset: 1, size: 15,
+                    socketFlags: SocketFlags.None);
+                if (15 == cntTxfr) return true;
+                break;
+            default:
+                Console.WriteLine($"TODO: Byte16 send {cntTxfr}b!");
+                break;
+        }
+        return false;
+    }
+}
+
 sealed class ClientQueue
 {
     Queue<Socket> Queue = new();
-    object Lock = new();
 
     public void Add(Socket socket)
     {
-        lock (Lock)
+        lock (this)
         {
             Queue.Enqueue(socket);
         }
@@ -135,7 +212,7 @@ sealed class ClientQueue
 
     public Socket? Get()
     {
-        lock (Lock)
+        lock (this)
         {
             if (Queue.Count == 0) return null;
             return Queue.Dequeue();
@@ -145,6 +222,7 @@ sealed class ClientQueue
 
 static partial class Helper
 {
+    public const int InitBufferSize = 16 * 1024;
     public static void Log(string message)
     {
         Console.WriteLine(

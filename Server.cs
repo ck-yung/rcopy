@@ -6,13 +6,13 @@ namespace rcopy2;
 
 static class Server
 {
-    public static bool Run(IEnumerable<string> mainArgs,
-        CancellationTokenSource cancellationTokenSource)
+    public static bool Run(string ipServer, IEnumerable<string> args)
     {
-        var ipServerText = mainArgs.First();
-        var endPointThe = ParseIpEndpoint(ipServerText);
+        var cancellationTokenSource = new CancellationTokenSource();
+
+        var endPointThe = ParseIpEndpoint(ipServer);
         var listener = new TcpListener(endPointThe);
-        Log($"Start listen on {endPointThe.Address} at port {endPointThe.Port}");
+        Log($"Start listen on {endPointThe.Address} at {endPointThe.Port}");
         listener.Start();
         Console.CancelKeyPress += (_, e) =>
         {
@@ -36,6 +36,7 @@ static class Server
                     var clSocket = await listener.AcceptSocketAsync(
                         cancellationTokenSource.Token);
                     socketQueue.Add(clSocket);
+
                     _ = Task.Run(async () =>
                     {
                         var socketThe = socketQueue.Get();
@@ -44,22 +45,51 @@ static class Server
                             ErrorLog("Error! No client connection is found!");
                             return;
                         }
+
                         var remoteEndPoint = socketThe.RemoteEndPoint;
                         Log($"'{remoteEndPoint}' connected");
 
-                        bool statusTxfr = false;
-                        int cntTxfr = 0;
-                        UInt16 sizeWant = 0;
                         var sizeThe = new Byte2();
-                        var buf2 = new byte[4096];
+                        var tmp3 = new Byte16();
+                        long tmp4 = 0;
                         try
                         {
+                            bool statusTxfr = false;
+                            int cntTxfr = 0;
+                            UInt16 sizeWant = 0;
+                            var buf2 = new byte[InitBufferSize];
+
+                            if (false == await sizeThe.From(1).Send(socketThe,
+                                cancellationTokenSource.Token))
+                            {
+                                ErrorLog($"Fail to send the code of buffer size");
+                                return;
+                            }
+
                             while (true)
                             {
+                                (statusTxfr, tmp4) = await tmp3.Receive(clSocket,
+                                    cancellationTokenSource.Token);
+                                if (false == statusTxfr)
+                                {
+                                    break;
+                                }
+                                DateTimeOffset fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp4);
+
+                                (statusTxfr, tmp4) = await tmp3.Receive(clSocket,
+                                    cancellationTokenSource.Token);
+                                if (false == statusTxfr)
+                                {
+                                    Log($"Read file-size failed!");
+                                    break;
+                                }
+                                long fileSize = tmp4;
+
                                 (statusTxfr, sizeWant) = await sizeThe.Receive(
                                     socketThe, cancellationTokenSource.Token);
                                 if ((false == statusTxfr) || (sizeWant == 0))
                                 {
+                                    Log($"Read length-of-file-name failed!");
                                     break;
                                 }
 
@@ -70,25 +100,28 @@ static class Server
                                     cancellationTokenSource.Token);
                                 System.Diagnostics.Debug.WriteLine(
                                     $"{DateTime.Now.ToString("s")} Recv {cntTxfr} bytes");
-                                var recvText = Encoding.UTF8.GetString(buf2, 0, cntTxfr);
-                                Log($"'{remoteEndPoint}' > '{recvText}'");
+                                var fileName = Encoding.UTF8.GetString(buf2, 0, cntTxfr);
+                                Log($"'{remoteEndPoint}' > {fileSize,10} {fileTime:s} '{fileName}'");
 
-                                sizeThe.From(0);
-                                if (false == await sizeThe.Send(socketThe, cancellationTokenSource.Token))
+                                if (false == await sizeThe.From(0).Send(socketThe,
+                                    cancellationTokenSource.Token))
                                 {
                                     ErrorLog($"Fail to send response");
                                     break;
                                 }
                             }
-                            Log($"'{endPointThe}' dropped");
+                        }
+                        catch (Exception ee)
+                        {
+                            ErrorLog($"'{remoteEndPoint}' {ee}");
+                        }
+                        finally
+                        {
+                            Log($"'{remoteEndPoint}' dropped");
                             await Task.Delay(20);
                             socketThe.Shutdown(SocketShutdown.Both);
                             await Task.Delay(20);
                             socketThe.Close();
-                        }
-                        catch (Exception ee)
-                        {
-                            ErrorLog($"'{endPointThe}' {ee}");
                         }
                     });
                 }
