@@ -43,42 +43,16 @@ sealed class Byte2
     public async Task<(bool Status, UInt16 Result)> Receive(
         Socket socket, CancellationToken cancellation)
     {
-        int cntTxfr = await socket.ReceiveAsync(Data, cancellation);
-        switch (cntTxfr)
-        {
-            case 0:
-                return (false, 0);
-            case Length:
-                return (true, Value());
-            case 1:
-                cntTxfr = socket.Receive(Data, offset: 1, size: 1,
-                    socketFlags: SocketFlags.None);
-                if (1 == cntTxfr) return(true, Value());
-                break;
-            default:
-                break;
-        }
-        return (false, 0);
+        int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
+        if (cntTxfr != Length) return (false, 0);
+        return (true, Value());
     }
 
     public async Task<bool> Send(Socket socket, CancellationToken cancellation)
     {
-        int cntTxfr = await socket.SendAsync(Data, cancellation);
-        switch (cntTxfr)
-        {
-            case 0:
-                return false;
-            case Length:
-                return true;
-            case 1:
-                cntTxfr = socket.Send(Data, offset: 1, size: 1,
-                    socketFlags: SocketFlags.None);
-                if (1 == cntTxfr) return true;
-                break;
-            default:
-                break;
-        }
-        return false;
+        int cntTxfr = await Helper.Send(socket, Data, Length, cancellation);
+        if (cntTxfr != Length) return false;
+        return true;
     }
 }
 
@@ -156,56 +130,17 @@ sealed class Byte16
     }
 
     public async Task<(bool Status, long Result)> Receive(
-    Socket socket, CancellationToken cancellation)
+        Socket socket, CancellationToken cancellation)
     {
         int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
-        if (cntTxfr == Length)
-        {
-            return (true, Value());
-        }
-        return (false, 0);
+        if (cntTxfr != Length) return (false, 0);
+        return (true, Value());
     }
 
     public async Task<bool> Send(Socket socket, CancellationToken cancellation)
     {
-        var buf = new byte[5];
-        int cntTxfr = 0;
-
-        Array.Copy(Data, sourceIndex: 0, destinationArray: buf, destinationIndex: 0, length: 5);
-        cntTxfr = await Helper.Send(socket, buf, 5, cancellation);
-        if (cntTxfr != 5) return false;
-        await Task.Delay(1234);
-
-        Array.Copy(Data, sourceIndex: 5, destinationArray: buf, destinationIndex: 0, length: 5);
-        cntTxfr = await Helper.Send(socket, buf, 5, cancellation);
-        if (cntTxfr != 5) return false;
-        await Task.Delay(1234);
-
-        Array.Copy(Data, sourceIndex: 10, destinationArray: buf, destinationIndex: 0, length: 5);
-        cntTxfr = await Helper.Send(socket, buf, 5, cancellation);
-        if (cntTxfr != 5) return false;
-
-        Array.Copy(Data, sourceIndex: 15, destinationArray: buf, destinationIndex: 0, length: 1);
-        cntTxfr = await Helper.Send(socket, buf, 1, cancellation);
-        if (cntTxfr != 1) return false;
-        /*
-        int cntTxfr = await socket.SendAsync(Data, cancellation);
-        switch (cntTxfr)
-        {
-            case 0:
-                return false;
-            case 16: // ??? TODO const readonly
-                return true;
-            case 1:
-                cntTxfr = socket.Send(Data, offset: 1, size: 15,
-                    socketFlags: SocketFlags.None);
-                if (15 == cntTxfr) return true;
-                break;
-            default:
-                Console.WriteLine($"TODO: Byte16 send {cntTxfr}b!");
-                break;
-        }
-        */
+        int cntTxfr = await Helper.Send(socket, Data, Length, cancellation);
+        if (cntTxfr != Length) return false;
         return true;
     }
 }
@@ -232,21 +167,24 @@ sealed class ClientQueue
     }
 }
 
-static partial class Helper
+static class Log
 {
-    public const int InitBufferSize = 16 * 1024;
-
-    public static void Log(string message)
+    public static void Ok(string message)
     {
         Console.WriteLine(
             $"{DateTime.Now.ToString("s")} {message}");
     }
 
-    public static void ErrorLog(string message)
+    public static void Error(string message)
     {
         Console.Error.WriteLine(
             $"{DateTime.Now.ToString("s")} {message}");
     }
+}
+
+static partial class Helper
+{
+    public const int InitBufferSize = 16 * 1024;
 
     [GeneratedRegex(
     @"^(?<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(?<port>\d{1,5})$")]
@@ -313,7 +251,6 @@ static partial class Helper
         {
             buffer = new Memory<byte>(data, start: offset, length: wantSize);
             cntTxfr = await socket.ReceiveAsync(buffer, token);
-            Log($"Recv {cntTxfr}b from offset:{offset}, want:{wantSize}");
             if (cntTxfr < 1) break;
             rtn += cntTxfr;
             offset += cntTxfr;
@@ -333,7 +270,6 @@ static partial class Helper
         {
             buffer = new Memory<byte>(data, start: offset, length: wantSize);
             cntTxfr = await socket.SendAsync(buffer, token);
-            Log($"Send {cntTxfr}b from offset:{offset}, want:{wantSize}");
             if (cntTxfr < 1) break;
             rtn += cntTxfr;
             offset += cntTxfr;

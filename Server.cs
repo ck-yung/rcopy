@@ -12,7 +12,7 @@ static class Server
 
         var endPointThe = ParseIpEndpoint(ipServer);
         var listener = new TcpListener(endPointThe);
-        Log($"Start listen on {endPointThe.Address} at {endPointThe.Port}");
+        Log.Ok($"Start listen on {endPointThe.Address} at {endPointThe.Port}");
         listener.Start();
         Console.CancelKeyPress += (_, e) =>
         {
@@ -31,6 +31,7 @@ static class Server
             try
             {
                 var socketQueue = new ClientQueue();
+                var buf3 = new byte[2048];
                 while (true)
                 {
                     var clSocket = await listener.AcceptSocketAsync(
@@ -42,12 +43,12 @@ static class Server
                         var socketThe = socketQueue.Get();
                         if (socketThe == null)
                         {
-                            ErrorLog("Error! No client connection is found!");
+                            Log.Error("Error! No client connection is found!");
                             return;
                         }
 
                         var remoteEndPoint = socketThe.RemoteEndPoint;
-                        Log($"'{remoteEndPoint}' connected");
+                        Log.Ok($"'{remoteEndPoint}' connected");
 
                         var sizeThe = new Byte2();
                         var tmp3 = new Byte16();
@@ -62,7 +63,7 @@ static class Server
                             if (false == await sizeThe.From(1).Send(socketThe,
                                 cancellationTokenSource.Token))
                             {
-                                ErrorLog($"Fail to send the code of buffer size");
+                                Log.Error($"Fail to send the code of buffer size");
                                 return;
                             }
 
@@ -80,7 +81,7 @@ static class Server
                                     cancellationTokenSource.Token);
                                 if (false == statusTxfr)
                                 {
-                                    Log($"Read file-size failed!");
+                                    Log.Ok($"Read file-size failed!");
                                     break;
                                 }
                                 long fileSize = tmp4;
@@ -89,35 +90,39 @@ static class Server
                                     socketThe, cancellationTokenSource.Token);
                                 if ((false == statusTxfr) || (sizeWant == 0))
                                 {
-                                    Log($"Read length-of-file-name failed!");
+                                    Log.Ok($"Read length-of-file-name failed!");
                                     break;
                                 }
 
                                 System.Diagnostics.Debug.WriteLine(
-                                    $"Read msgSize:{sizeWant}");
-                                var buf3 = new ArraySegment<byte>(buf2, 0, sizeWant);
-                                cntTxfr = await socketThe.ReceiveAsync(buf3,
-                                    cancellationTokenSource.Token);
+                                    $"Read length-of-file-name:{sizeWant}");
+                                cntTxfr = await Helper.Recv(socketThe, buf3,
+                                    sizeWant, cancellationTokenSource.Token);
+                                if (cntTxfr != sizeWant)
+                                {
+                                    Log.Ok($"Read file-name failed! (want:{sizeWant} but real:{cntTxfr})");
+                                    break;
+                                }
                                 System.Diagnostics.Debug.WriteLine(
                                     $"{DateTime.Now.ToString("s")} Recv {cntTxfr} bytes");
-                                var fileName = Encoding.UTF8.GetString(buf2, 0, cntTxfr);
-                                Log($"'{remoteEndPoint}' > {fileSize,10} {fileTime:s} '{fileName}'");
+                                var fileName = Encoding.UTF8.GetString(buf3, 0, cntTxfr);
+                                Log.Ok($"'{remoteEndPoint}' > {fileSize,10} {fileTime:s} '{fileName}'");
 
                                 if (false == await sizeThe.From(0).Send(socketThe,
                                     cancellationTokenSource.Token))
                                 {
-                                    ErrorLog($"Fail to send response");
+                                    Log.Error($"Fail to send response");
                                     break;
                                 }
                             }
                         }
                         catch (Exception ee)
                         {
-                            ErrorLog($"'{remoteEndPoint}' {ee}");
+                            Log.Error($"'{remoteEndPoint}' {ee}");
                         }
                         finally
                         {
-                            Log($"'{remoteEndPoint}' dropped");
+                            Log.Ok($"'{remoteEndPoint}' dropped");
                             await Task.Delay(20);
                             socketThe.Shutdown(SocketShutdown.Both);
                             await Task.Delay(20);
@@ -128,11 +133,11 @@ static class Server
             }
             catch (OperationCanceledException)
             {
-                Log("Listening is stopped");
+                Log.Ok("Listening is stopped");
             }
             catch (Exception ee)
             {
-                ErrorLog("Accept: " + ee.GetType().Name + ": " + ee.Message);
+                Log.Error("Accept: " + ee.GetType().Name + ": " + ee.Message);
             }
 
             try
@@ -143,7 +148,7 @@ static class Server
             }
             catch (Exception ee)
             {
-                ErrorLog(ee.GetType().Name + ": " + ee.Message);
+                Log.Error(ee.GetType().Name + ": " + ee.Message);
             }
         }).Wait();
 
