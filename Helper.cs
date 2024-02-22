@@ -168,12 +168,26 @@ sealed class Byte16
 
     public async Task<bool> Send(Socket socket, CancellationToken cancellation)
     {
+        var buf = new byte[5];
         int cntTxfr = 0;
-        cntTxfr = socket.Send(Data, offset: 0, size: 8, socketFlags: SocketFlags.None);
-        if (cntTxfr != 8) return false;
-        await Task.Delay(2000);
-        cntTxfr = socket.Send(Data, offset: 8, size: 8, socketFlags: SocketFlags.None);
-        if (cntTxfr != 8) return false;
+
+        Array.Copy(Data, sourceIndex: 0, destinationArray: buf, destinationIndex: 0, length: 5);
+        cntTxfr = await Helper.Send(socket, buf, 5, cancellation);
+        if (cntTxfr != 5) return false;
+        await Task.Delay(1234);
+
+        Array.Copy(Data, sourceIndex: 5, destinationArray: buf, destinationIndex: 0, length: 5);
+        cntTxfr = await Helper.Send(socket, buf, 5, cancellation);
+        if (cntTxfr != 5) return false;
+        await Task.Delay(1234);
+
+        Array.Copy(Data, sourceIndex: 10, destinationArray: buf, destinationIndex: 0, length: 5);
+        cntTxfr = await Helper.Send(socket, buf, 5, cancellation);
+        if (cntTxfr != 5) return false;
+
+        Array.Copy(Data, sourceIndex: 15, destinationArray: buf, destinationIndex: 0, length: 1);
+        cntTxfr = await Helper.Send(socket, buf, 1, cancellation);
+        if (cntTxfr != 1) return false;
         /*
         int cntTxfr = await socket.SendAsync(Data, cancellation);
         switch (cntTxfr)
@@ -300,6 +314,26 @@ static partial class Helper
             buffer = new Memory<byte>(data, start: offset, length: wantSize);
             cntTxfr = await socket.ReceiveAsync(buffer, token);
             Log($"Recv {cntTxfr}b from offset:{offset}, want:{wantSize}");
+            if (cntTxfr < 1) break;
+            rtn += cntTxfr;
+            offset += cntTxfr;
+            wantSize -= cntTxfr;
+        }
+        return rtn;
+    }
+
+    public static async Task<int> Send(Socket socket,
+        byte[] data, int wantSize, CancellationToken token)
+    {
+        int rtn = 0;
+        int offset = 0;
+        int cntTxfr;
+        Memory<byte> buffer;
+        while (0 < wantSize)
+        {
+            buffer = new Memory<byte>(data, start: offset, length: wantSize);
+            cntTxfr = await socket.SendAsync(buffer, token);
+            Log($"Send {cntTxfr}b from offset:{offset}, want:{wantSize}");
             if (cntTxfr < 1) break;
             rtn += cntTxfr;
             offset += cntTxfr;
