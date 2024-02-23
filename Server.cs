@@ -1,4 +1,5 @@
 ﻿using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using static rcopy2.Helper;
 
@@ -124,6 +125,7 @@ static class Server
 
                                 int wantSize = 0;
                                 fileSizeRecv = 0;
+                                var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
                                 while (true) // (recvSize < fileSize)
                                 {
                                     (statusTxfr, tmp02) = await byte02.Receive(
@@ -159,6 +161,9 @@ static class Server
                                     //Log.Ok($"dbg: Recv data {cntTxfr}b");
                                     if (1 > cntTxfr) break;
                                     fileSizeRecv += cntTxfr;
+
+                                    md5.AppendData(buf2, 0, cntTxfr);
+
                                     if (false == await byte16.From(fileSizeRecv).Send(socketThe,
                                         cancellationTokenSource.Token))
                                     {
@@ -191,11 +196,26 @@ static class Server
                                 cntTxfr = await Helper.Recv(socketThe, buf2, tmp02,
                                     cancellationTokenSource.Token);
                                 //Log.Ok($"dbg: Recv MD5 {cntTxfr}b");
-                                var md5Recv = BitConverter
-                                .ToString(buf2, startIndex:0, length: tmp02)
-                                .Replace("-", "")
-                                .ToLower();
-                                Log.Ok($"#{idCnn} MD5 '{md5Recv}' <- '{fileName}'");
+                                //var md5Recv = BitConverter
+                                //.ToString(buf2, startIndex:0, length: tmp02)
+                                //.Replace("-", "")
+                                //.ToLower();
+                                //Log.Ok($"#{idCnn} MD5 '{md5Recv}' <- '{fileName}'");
+                                if (cntTxfr > 0)
+                                {
+                                    var hash = md5.GetCurrentHash();
+                                    if (false == hash.Compare(buf2))
+                                    {
+                                        var md5The = BitConverter
+                                        .ToString(hash, startIndex: 0, length: hash.Length)
+                                        .Replace("-", "").ToLower();
+                                        var md5Recv = BitConverter
+                                        .ToString(buf2, startIndex: 0,
+                                        length: int.Min( hash.Length, cntTxfr))
+                                        .Replace("-", "").ToLower();
+                                        Log.Error($"MD5 is mis-matched! Data:{md5The} but Recv:{md5Recv}");
+                                    }
+                                }
                             }
                         }
                         catch (Exception ee)

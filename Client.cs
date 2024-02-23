@@ -177,9 +177,6 @@ static class Client
                     }
 
                     var hash = md5.GetCurrentHash();
-                    var md5Result = BitConverter.ToString(hash)
-                        .Replace("-", "")
-                        .ToLower();
                     wantSentSize = hash.Length;
                     if (wantSentSize > 0)
                     {
@@ -193,7 +190,10 @@ static class Client
                             Log.Error($"Fail to MD5!");
                             break;
                         }
-                        Log.Ok($"MD5 '{md5Result}' <- '{info.Name}'");
+                        //var md5Result = BitConverter.ToString(hash)
+                        //    .Replace("-", "")
+                        //    .ToLower();
+                        //Log.Ok($"MD5 '{md5Result}' <- '{info.Name}'");
                     }
                 }
                 catch (Exception ee2)

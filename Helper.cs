@@ -281,4 +281,13 @@ static partial class Helper
         //Log.Ok($"Helper.Send {rtn}b (want:{wantSize})");
         return rtn;
     }
+
+    public static bool Compare(this byte[] the, byte[] other, int length = 0)
+    {
+        if (length == 0) length = the.Length;
+        if (length > other.Length) return false;
+        for (int ii = 0; ii < length; ii++)
+            if (the[ii] != other[ii]) return false;
+        return true;
+    }
 }
