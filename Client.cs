@@ -13,6 +13,7 @@ static class Client
         bool statusTxfr = false;
         UInt16 response = 0;
         var sizeThe = new Byte2();
+        long tmp16 = 0;
         var buf2 = new byte[4096];
 
         /*
@@ -49,17 +50,17 @@ static class Client
 
         async Task<bool> SendFileInfo(Socket socket, Info info)
         {
-            var tmp3 = new Byte16();
+            var byte16 = new Byte16();
 
             long tmp2 = new DateTimeOffset(info.File.LastWriteTimeUtc).ToUnixTimeSeconds();
-            if (false == await tmp3.From(tmp2).Send(socket, cancellationTokenSource.Token))
+            if (false == await byte16.From(tmp2).Send(socket, cancellationTokenSource.Token))
             {
                 Log.Error($"Fail to send date-time");
                 return false;
             }
 
             tmp2 = info.File.Length;
-            if (false == await tmp3.From(tmp2).Send(socket, cancellationTokenSource.Token))
+            if (false == await byte16.From(tmp2).Send(socket, cancellationTokenSource.Token))
             {
                 Log.Error($"Fail to send file-size");
                 return false;
@@ -81,17 +82,22 @@ static class Client
                 return false;
             }
 
-            (statusTxfr, response) = await sizeThe.Receive(socket,
+            (statusTxfr, tmp16) = await byte16.Receive(socket,
                 cancellationTokenSource.Token);
             if (false == statusTxfr)
             {
                 Log.Error($"Fail to read response");
                 return false;
             }
-            return (response==0);
+            if (0!=tmp16)
+            {
+                Log.Ok($"RSP < {tmp16}");
+            }
+            return (tmp16 == 0);
         }
 
-        int cntRun = 0;
+        int cntFile = 0;
+        long sumSize = 0;
         var endPointThe = ParseIpEndpoint(ipServer);
         var connectTimeout = new CancellationTokenSource(millisecondsDelay: 3000);
         Log.Ok($"Connect {endPointThe.Address} at port {endPointThe.Port} ..");
@@ -123,12 +129,13 @@ static class Client
                 {
                     break;
                 }
-                cntRun += 1;
+                cntFile += 1;
+                sumSize += info.File.Length;
             }
             serverThe.Client.Shutdown(SocketShutdown.Both);
             Task.Delay(20).Wait();
             serverThe.Client.Close();
-            Log.Ok("Connection is closed");
+            Log.Ok($"Connection is closed (cntFile={cntFile}; sumSize={sumSize})");
             Task.Delay(20).Wait();
         }
         catch (SocketException se)
@@ -139,6 +146,6 @@ static class Client
         {
             Log.Error($"Error! {ee}");
         }
-        return cntRun;
+        return cntFile;
     }
 }

@@ -54,8 +54,8 @@ static class Server
                         long sumSize = 0;
 
                         var sizeThe = new Byte2();
-                        var tmp3 = new Byte16();
-                        long tmp4 = 0;
+                        var byte16 = new Byte16();
+                        long tmp16 = 0;
                         try
                         {
                             bool statusTxfr = false;
@@ -72,22 +72,22 @@ static class Server
 
                             while (true)
                             {
-                                (statusTxfr, tmp4) = await tmp3.Receive(clSocket,
+                                (statusTxfr, tmp16) = await byte16.Receive(clSocket,
                                     cancellationTokenSource.Token);
                                 if (false == statusTxfr)
                                 {
                                     break;
                                 }
-                                DateTimeOffset fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp4);
+                                DateTimeOffset fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp16);
 
-                                (statusTxfr, tmp4) = await tmp3.Receive(clSocket,
+                                (statusTxfr, tmp16) = await byte16.Receive(clSocket,
                                     cancellationTokenSource.Token);
                                 if (false == statusTxfr)
                                 {
                                     Log.Ok($"Read file-size failed!");
                                     break;
                                 }
-                                long fileSize = tmp4;
+                                long fileSize = tmp16;
 
                                 (statusTxfr, sizeWant) = await sizeThe.Receive(
                                     socketThe, cancellationTokenSource.Token);
@@ -114,7 +114,7 @@ static class Server
                                 cntFille += 1;
                                 sumSize += fileSize;
 
-                                if (false == await sizeThe.From(0).Send(socketThe,
+                                if (false == await byte16.From(0).Send(socketThe,
                                     cancellationTokenSource.Token))
                                 {
                                     Log.Error($"Fail to send response");
@@ -128,7 +128,7 @@ static class Server
                         }
                         finally
                         {
-                            Log.Ok($"#{idCnn} '{remoteEndPoint}' dropped (cnt:{cntFille}; sumSize:{sumSize})");
+                            Log.Ok($"#{idCnn} '{remoteEndPoint}' dropped (cntFile:{cntFille}; sumSize:{sumSize})");
                             await Task.Delay(20);
                             socketThe.Shutdown(SocketShutdown.Both);
                             await Task.Delay(20);

@@ -248,17 +248,19 @@ static partial class Helper
     {
         int rtn = 0;
         int offset = 0;
+        int wantSize2 = wantSize;
         int cntTxfr;
         Memory<byte> buffer;
-        while (0 < wantSize)
+        while (0 < wantSize2)
         {
-            buffer = new Memory<byte>(data, start: offset, length: wantSize);
+            buffer = new Memory<byte>(data, start: offset, length: wantSize2);
             cntTxfr = await socket.ReceiveAsync(buffer, token);
             if (cntTxfr < 1) break;
             rtn += cntTxfr;
             offset += cntTxfr;
-            wantSize -= cntTxfr;
+            wantSize2 -= cntTxfr;
         }
+        //Log.Ok($"Helper.Recv {rtn}b (want:{wantSize})");
         return rtn;
     }
 
@@ -267,17 +269,19 @@ static partial class Helper
     {
         int rtn = 0;
         int offset = 0;
+        int wantSize2 = wantSize;
         int cntTxfr;
         Memory<byte> buffer;
-        while (0 < wantSize)
+        while (0 < wantSize2)
         {
-            buffer = new Memory<byte>(data, start: offset, length: wantSize);
+            buffer = new Memory<byte>(data, start: offset, length: wantSize2);
             cntTxfr = await socket.SendAsync(buffer, token);
             if (cntTxfr < 1) break;
             rtn += cntTxfr;
             offset += cntTxfr;
-            wantSize -= cntTxfr;
+            wantSize2 -= cntTxfr;
         }
+        //Log.Ok($"Helper.Send {rtn}b (want:{wantSize})");
         return rtn;
     }
 }
