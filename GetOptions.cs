@@ -60,4 +60,47 @@ static class Options
 
         return GetOthers();
     }
+
+    public static (bool, IEnumerable<FlagedArg>) Flag(string name,
+        IEnumerable<FlagedArg> args)
+    {
+        IEnumerable<FlagedArg> SelectFlag()
+        {
+            var itrThe = args.GetEnumerator();
+            while (itrThe.MoveNext())
+            {
+                var current = itrThe.Current;
+                if (current.Arg == name)
+                {
+                    yield return new FlagedArg(true, itrThe.Current.Arg);
+                }
+                else
+                {
+                    yield return current;
+                }
+            }
+        }
+
+        (bool, IEnumerable<FlagedArg>) GetOthers()
+        {
+            var qryFlaged = SelectFlag()
+                .GroupBy((it) => it.Flag)
+                .ToDictionary((grp) => grp.Key,
+                elementSelector: (grp) => grp.AsEnumerable());
+
+            IEnumerable<FlagedArg>? qryNotFound;
+            if (false == qryFlaged.TryGetValue(false, out qryNotFound))
+            {
+                qryNotFound = Array.Empty<FlagedArg>();
+            }
+
+            if (qryFlaged.TryGetValue(true, out var qryFound))
+            {
+                return (true, qryNotFound);
+            }
+            return (false, qryNotFound);
+        }
+
+        return GetOthers();
+    }
 }

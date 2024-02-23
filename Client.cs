@@ -1,5 +1,4 @@
 ﻿using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text;
 using static rcopy2.Helper;
 namespace rcopy2;
@@ -86,7 +85,11 @@ static class Client
                 Log.Error($"Fail to read buffer size");
                 return -1;
             }
-            Log.Debug($"Code of buffer size is {codeOfBuffer}");
+            var upperControlFlag = (codeOfBuffer & 0xFF00);
+            var md5Flag = (upperControlFlag & Md5Required) == Md5Required;
+            Log.Debug($"Upper Control:{upperControlFlag:x4}, Md5:{md5Flag}");
+            codeOfBuffer &= 0x00FF;
+            Log.Debug($"Code of buffer size is {codeOfBuffer}; ");
 
             foreach (var info in infos)
             {
@@ -104,7 +107,7 @@ static class Client
                 int wantSentSize = 0;
                 try
                 {
-                    var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+                    var md5 = Md5Factory.Make(md5Flag);
                     using var inpFile = File.OpenRead(info.Name);
                     while (sentSize < info.File.Length)
                     {
@@ -147,7 +150,7 @@ static class Client
                         cntTxfr = await Helper.Send(socketThe, buf2, wantSentSize,
                             cancellationTokenSource.Token);
 
-                        md5.AppendData(buf2, 0, readFileSize);
+                        md5.Add(buf2, readFileSize);
 
                         if (1 > cntTxfr) break;
                         sentSize += cntTxfr;
@@ -176,7 +179,7 @@ static class Client
                     }
 
                     #region MD5
-                    var hash = md5.GetCurrentHash();
+                    var hash = md5.Get();
                     wantSentSize = hash.Length;
                     if (wantSentSize > 0)
                     {

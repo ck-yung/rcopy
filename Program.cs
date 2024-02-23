@@ -45,18 +45,19 @@ public class Program
 
 	static bool PrintSyntax()
 	{
-		WriteLine($"""
+        // {nameof(rcopy2)} to HOST:PORT - [--raw] [--name FILE-NAME]
+        WriteLine($"""
         Syntax:
-          {nameof(rcopy2)} to HOST:PORT - [--raw] [--name FILE-NAME]
           {nameof(rcopy2)} to HOST:PORT FILE [FILE ..]
           {nameof(rcopy2)} to HOST:PORT --files-from FROM-FILE [FILE ..]
         Read '--files-from' (short-cut '-T') from redir console if FROM-FILE is -
 
         Syntax:
-          {nameof(rcopy2)} on HOST:PORT [--out-dir OUT-DIR]
+          {nameof(rcopy2)} on HOST:PORT [--out-dir OUT-DIR] [--md5 FLAG]
 
         where
           HOST is an IP or a DNS host name
+          FLAG is 'on' or 'off'
         """);
 		return false;
 	}

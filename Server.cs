@@ -1,5 +1,4 @@
 ﻿using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text;
 using static rcopy2.Helper;
 
@@ -7,10 +6,10 @@ namespace rcopy2;
 
 static class Server
 {
-    public const UInt16 CodeOfBuffer = 2;
     public static bool Run(string ipServer, IEnumerable<string> args)
     {
-        (var outdir, _) = Options.Get("--out-dir",
+        #region OUT-DIR
+        (var outdir, var argsRest) = Options.Get("--out-dir",
             args.Select((it) => new FlagedArg(false, it)));
 
         Func<string, string> ToStandardDirSep =
@@ -33,6 +32,27 @@ static class Server
             ToOutputFilename = (it) => Path.Join(outdir,
                 ToStandardDirSep(it));
         }
+        #endregion
+
+        UInt16 ControlCode = CodeOfBuffer;
+        Func<IMD5> MakeMd5 = () => Md5Factory.Make(true);
+        #region MD5 Flag
+        (var md5Flag, argsRest) = Options.Get("--md5", argsRest);
+        if (md5Flag == "off")
+        {
+            ControlCode += Md5Skipped;
+            MakeMd5 = () => Md5Factory.Make(false);
+        }
+        else if (md5Flag == "on" || string.IsNullOrEmpty(md5Flag))
+        {
+            ControlCode += Md5Required;
+        }
+        else
+        {
+            throw new ArgumentException(
+                $"Value to '--md5' should be 'on' or 'off' but not '{md5Flag}");
+        }
+        #endregion
 
         var cancellationTokenSource = new CancellationTokenSource();
 
@@ -90,7 +110,7 @@ static class Server
                             UInt16 sizeWant = 0;
                             var buf2 = new byte[InitBufferSize];
 
-                            if (false == await byte02.From(CodeOfBuffer).Send(socketThe,
+                            if (false == await byte02.From(ControlCode).Send(socketThe,
                                 cancellationTokenSource.Token))
                             {
                                 Log.Error($"Fail to send the code of buffer size");
@@ -147,20 +167,24 @@ static class Server
 
                                 var outputRealFilename = ToOutputFilename(fileName);
                                 Log.Debug($"output file = '{outputRealFilename}'");
-                                var outputShadowFilename = ToOutputFilename(
-                                    "rcopy2_" + DateTime.Now.ToString("yyyy-MMdd_HHmm-ffff")+ ".tmp");
+
+                                var prefixShadowFilename = "rcopy2_"
+                                + Path.GetFileName(fileName)
+                                + DateTime.Now.ToString("_yyyy-MMdd_HHmm-ffff");
+
+                                var outputShadowFilename = ToOutputFilename(prefixShadowFilename + ".tmp");
                                 int tryCnt = 0;
                                 while (File.Exists(outputShadowFilename))
                                 {
                                     tryCnt += 1;
                                     outputShadowFilename = ToOutputFilename(
-                                    "rcopy2_" + DateTime.Now.ToString("yyyy-MMdd_HHmm-ffff") + $".{tryCnt}.tmp");
+                                        prefixShadowFilename + $".{tryCnt}.tmp");
                                 }
                                 Log.Debug($"shadow file = '{outputShadowFilename}'");
 
                                 int wantSize = 0;
                                 fileSizeRecv = 0;
-                                var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+                                var md5 = MakeMd5();
                                 using (var outFs = File.Create(outputShadowFilename))
                                 {
                                     while (fileSizeWant >= fileSizeRecv)
@@ -194,7 +218,7 @@ static class Server
                                         if (1 > cntTxfr) break;
                                         fileSizeRecv += cntTxfr;
 
-                                        md5.AppendData(buf2, 0, cntTxfr);
+                                        md5.Add(buf2, cntTxfr);
 
                                         outFs.Write(buf2, 0, cntTxfr);
 
@@ -215,49 +239,67 @@ static class Server
                                 }
 
                                 #region MD5
-                                (statusTxfr, tmp02) = await byte02.Receive(socketThe,
-                                    cancellationTokenSource.Token);
-                                if (false == statusTxfr)
+                                var hash = md5.Get();
+                                if (hash.Length > 0)
                                 {
-                                    break;
-                                }
-                                if (1 > tmp02)
-                                {
-                                    Log.Error("MD5 size is ZERO!");
-                                    break;
-                                }
-                                cntTxfr = await Helper.Recv(socketThe, buf2, tmp02,
-                                    cancellationTokenSource.Token);
-                                if (cntTxfr > 0)
-                                {
-                                    var hash = md5.GetCurrentHash();
-                                    if (false == hash.Compare(buf2))
+                                    (statusTxfr, tmp02) = await byte02.Receive(socketThe,
+                                        cancellationTokenSource.Token);
+                                    if (false == statusTxfr)
                                     {
-                                        var md5The = BitConverter
-                                        .ToString(hash, startIndex: 0, length: hash.Length)
-                                        .Replace("-", "").ToLower();
-                                        var md5Recv = BitConverter
-                                        .ToString(buf2, startIndex: 0,
-                                        length: int.Min( hash.Length, cntTxfr))
-                                        .Replace("-", "").ToLower();
-                                        Log.Error($"MD5 is mis-matched! Data:{md5The} but Recv:{md5Recv}");
+                                        break;
+                                    }
+                                    if (1 > tmp02)
+                                    {
+                                        Log.Error("MD5 size is ZERO!");
+                                        break;
+                                    }
+                                    cntTxfr = await Helper.Recv(socketThe, buf2, tmp02,
+                                        cancellationTokenSource.Token);
+                                    if (cntTxfr > 0)
+                                    {
+                                        if (false == hash.Compare(buf2))
+                                        {
+                                            var md5The = BitConverter
+                                            .ToString(hash, startIndex: 0, length: hash.Length)
+                                            .Replace("-", "").ToLower();
+                                            var md5Recv = BitConverter
+                                            .ToString(buf2, startIndex: 0,
+                                            length: int.Min(hash.Length, cntTxfr))
+                                            .Replace("-", "").ToLower();
+                                            Log.Error($"MD5 is mis-matched! Data:{md5The} but Recv:{md5Recv}");
+                                        }
                                     }
                                 }
                                 #endregion
 
                                 #region Rename outputShadowFilename to outputRealFilename
-                                if (File.Exists(outputShadowFilename) &&
-                                false == File.Exists(outputRealFilename))
+                                if (File.Exists(outputShadowFilename))
                                 {
-                                    var dirThe = Path.GetDirectoryName(outputRealFilename);
-                                    if (false == string.IsNullOrEmpty(dirThe) &&
-                                    false == Directory.Exists(dirThe))
+                                    if (File.Exists(outputRealFilename))
                                     {
-                                        Directory.CreateDirectory(dirThe);
+                                        Console.Error.WriteLine(
+                                            $"'{outputRealFilename}' <- '{outputShadowFilename}' failed because already existed.");
                                     }
-                                    File.Move(outputShadowFilename, outputRealFilename);
-                                    File.SetLastWriteTime(path: outputRealFilename,
-                                        lastWriteTime: fileTime.DateTime);
+                                    else
+                                    {
+                                        try
+                                        {
+                                            var dirThe = Path.GetDirectoryName(outputRealFilename);
+                                            if (false == string.IsNullOrEmpty(dirThe) &&
+                                            false == Directory.Exists(dirThe))
+                                            {
+                                                Directory.CreateDirectory(dirThe);
+                                            }
+                                            File.Move(outputShadowFilename, outputRealFilename);
+                                            File.SetLastWriteTime(path: outputRealFilename,
+                                                lastWriteTime: fileTime.DateTime);
+                                        }
+                                        catch (Exception)
+                                        {
+                                            Log.Error(
+                                                $"Fail to rename '{outputShadowFilename}' as '{outputRealFilename}'");
+                                        }
+                                    }
                                 }
                                 #endregion
                             }

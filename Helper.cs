@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -193,6 +194,10 @@ static class Log
 
 static partial class Helper
 {
+    public const UInt16 CodeOfBuffer = 2;
+    public const UInt16 Md5Required = 0x0100;
+    public const UInt16 Md5Skipped =  0x0200;
+
     public const int InitBufferSize = 16 * 1024;
 
     [GeneratedRegex(
@@ -298,5 +303,45 @@ static partial class Helper
         for (int ii = 0; ii < length; ii++)
             if (the[ii] != other[ii]) return false;
         return true;
+    }
+}
+
+internal interface IMD5
+{
+    string GetName();
+    void Add(byte[] data, int length);
+    byte[] Get();
+}
+
+internal static class Md5Factory
+{
+    class Md5Real : IMD5
+    {
+        readonly IncrementalHash Md5 = IncrementalHash
+            .CreateHash(HashAlgorithmName.MD5);
+        public void Add(byte[] data, int length)
+        {
+            Md5.AppendData(data, 0, length);
+        }
+        public byte[] Get()
+        {
+            return Md5.GetCurrentHash();
+        }
+        public string GetName() => "Real";
+    }
+
+    class Md5Fake : IMD5
+    {
+        public void Add(byte[] data, int length) { }
+        public byte[] Get() => Array.Empty<byte>();
+        public string GetName() => "Fake";
+    }
+
+    static Md5Fake Null = new();
+
+    public static IMD5 Make(bool flag)
+    {
+        if (flag) return new Md5Real();
+        return Null;
     }
 }
