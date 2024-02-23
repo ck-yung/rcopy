@@ -9,7 +9,6 @@ static class Client
     {
         var cancellationTokenSource = new CancellationTokenSource();
 
-        UInt16 codeOfBuffer = 0;
         int cntTxfr = 0;
         bool statusTxfr = false;
         var byte02 = new Byte2();
@@ -78,18 +77,24 @@ static class Client
             Log.Ok("Connected");
             var socketThe = serverThe.Client;
 
-            (statusTxfr, codeOfBuffer) = await byte02.Receive(socketThe,
+            (statusTxfr, var controlCode) = await byte02.Receive(socketThe,
                 cancellationTokenSource.Token);
             if (false == statusTxfr)
             {
-                Log.Error($"Fail to read buffer size");
+                Log.Error($"Fail to recv control code!");
                 return -1;
             }
-            var upperControlFlag = (codeOfBuffer & 0xFF00);
+            var upperControlFlag = (controlCode & 0xFF00);
             var md5Flag = (upperControlFlag & Md5Required) == Md5Required;
-            Log.Debug($"Upper Control:{upperControlFlag:x4}, Md5:{md5Flag}");
-            codeOfBuffer &= 0x00FF;
-            Log.Debug($"Code of buffer size is {codeOfBuffer}; ");
+            Log.Ok($"Upper Control:{upperControlFlag:x4}, Md5:{md5Flag}");
+            UInt16 codeOfBuffer = (UInt16)(controlCode & (UInt16) 0x00FF);
+
+            if (false == await byte02.From(controlCode).Send(socketThe, cancellationTokenSource.Token))
+            {
+                Log.Error($"Fail to reply control code!");
+                return -1;
+            }
+            Log.Ok($"Reply Control Code x{codeOfBuffer:x4} ");
 
             foreach (var info in infos)
             {

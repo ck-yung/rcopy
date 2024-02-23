@@ -35,22 +35,22 @@ static class Server
         #endregion
 
         UInt16 ControlCode = CodeOfBuffer;
-        Func<IMD5> MakeMd5 = () => Md5Factory.Make(true);
         #region MD5 Flag
-        (var md5Flag, argsRest) = Options.Get("--md5", argsRest);
-        if (md5Flag == "off")
+        (var md5CtrlText, argsRest) = Options.Get("--md5", argsRest);
+        var md5Flag = true;
+        if (md5CtrlText == "off")
         {
             ControlCode += Md5Skipped;
-            MakeMd5 = () => Md5Factory.Make(false);
+            md5Flag = false;
         }
-        else if (md5Flag == "on" || string.IsNullOrEmpty(md5Flag))
+        else if (md5CtrlText == "on" || string.IsNullOrEmpty(md5CtrlText))
         {
             ControlCode += Md5Required;
         }
         else
         {
             throw new ArgumentException(
-                $"Value to '--md5' should be 'on' or 'off' but not '{md5Flag}");
+                $"Value to '--md5' should be 'on' or 'off' but not '{md5CtrlText}");
         }
         #endregion
 
@@ -117,6 +117,20 @@ static class Server
                                 return;
                             }
 
+                            (statusTxfr, tmp02) = await byte02.Receive(clSocket,
+                                cancellationTokenSource.Token);
+                            if (ControlCode != tmp02)
+                            {
+                                Log.Ok($"#{idCnn} reply different CtrlCode x{tmp02:x4} from system x{ControlCode:x4}");
+                                return;
+                            }
+                            var upperControlFlag = (tmp02 & 0xFF00);
+                            var md5FlagThe = (upperControlFlag & Md5Required) == Md5Required;
+                            if (md5FlagThe != md5Flag)
+                            {
+                                Log.Ok($"#{idCnn} reply different MD5-Flag");
+                            }
+
                             long fileSizeWant = 0;
                             long fileSizeRecv = 0;
                             while (true)
@@ -127,7 +141,15 @@ static class Server
                                 {
                                     break;
                                 }
-                                var fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp16);
+                                var fileTime = DateTimeOffset.Now;
+                                try
+                                {
+                                    fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp16);
+                                }
+                                catch (Exception eeDt)
+                                {
+                                    Log.Error($"FromUnixTimeSeconds({tmp16}) failed! {eeDt}");
+                                }
 
                                 (statusTxfr, tmp16) = await byte16.Receive(clSocket,
                                     cancellationTokenSource.Token);
@@ -184,7 +206,7 @@ static class Server
 
                                 int wantSize = 0;
                                 fileSizeRecv = 0;
-                                var md5 = MakeMd5();
+                                var md5 = Md5Factory.Make(md5FlagThe);
                                 using (var outFs = File.Create(outputShadowFilename))
                                 {
                                     while (fileSizeWant >= fileSizeRecv)
