@@ -5,7 +5,7 @@ namespace rcopy2;
 
 static class Client
 {
-    public static async Task<bool> Run(string ipServer, Info[] infos)
+    public static async Task<int> Run(string ipServer, IEnumerable<Info> infos)
     {
         var cancellationTokenSource = new CancellationTokenSource();
 
@@ -91,6 +91,7 @@ static class Client
             return (response==0);
         }
 
+        int cntRun = 0;
         var endPointThe = ParseIpEndpoint(ipServer);
         var connectTimeout = new CancellationTokenSource(millisecondsDelay: 3000);
         Log.Ok($"Connect {endPointThe.Address} at port {endPointThe.Port} ..");
@@ -106,17 +107,23 @@ static class Client
             if (false == statusTxfr)
             {
                 Log.Error($"Fail to read buffer size");
-                return false;
+                return -1;
             }
             Log.Ok($"Code of buffer size is {response}");
 
             var infoLong = new Byte8();
             foreach (var info in infos)
             {
+                if (info.File.Length < 1)
+                {
+                    Log.Ok($"Skip empty file '{info.Name}'");
+                    continue;
+                }
                 if (false == await SendFileInfo(socketThe, info))
                 {
                     break;
                 }
+                cntRun += 1;
             }
             serverThe.Client.Shutdown(SocketShutdown.Both);
             Task.Delay(20).Wait();
@@ -132,6 +139,6 @@ static class Client
         {
             Log.Error($"Error! {ee}");
         }
-        return true;
+        return cntRun;
     }
 }

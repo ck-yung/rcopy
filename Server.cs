@@ -50,6 +50,9 @@ static class Server
                         var remoteEndPoint = socketThe.RemoteEndPoint;
                         Log.Ok($"#{idCnn} '{remoteEndPoint}' connected");
 
+                        int cntFille = 0;
+                        long sumSize = 0;
+
                         var sizeThe = new Byte2();
                         var tmp3 = new Byte16();
                         long tmp4 = 0;
@@ -108,6 +111,9 @@ static class Server
                                 var fileName = Encoding.UTF8.GetString(buf3, 0, cntTxfr);
                                 Log.Ok($"#{idCnn} > {fileSize,10} {fileTime:s} '{fileName}'");
 
+                                cntFille += 1;
+                                sumSize += fileSize;
+
                                 if (false == await sizeThe.From(0).Send(socketThe,
                                     cancellationTokenSource.Token))
                                 {
@@ -122,7 +128,7 @@ static class Server
                         }
                         finally
                         {
-                            Log.Ok($"#{idCnn} '{remoteEndPoint}' dropped");
+                            Log.Ok($"#{idCnn} '{remoteEndPoint}' dropped (cnt:{cntFille}; sumSize:{sumSize})");
                             await Task.Delay(20);
                             socketThe.Shutdown(SocketShutdown.Both);
                             await Task.Delay(20);

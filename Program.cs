@@ -37,7 +37,7 @@ public class Program
 			case "on":
 				return Server.Run(ipThe, argRest);
 			case "to":
-				return SendTo(ipThe, argRest.ToArray());
+				return SendTo(ipThe, argRest);
 			default:
 				return PrintSyntax();
 		}
@@ -49,7 +49,7 @@ public class Program
         Syntax:
           {nameof(rcopy2)} to HOST:PORT - [--raw] [--name FILE-NAME]
           {nameof(rcopy2)} to HOST:PORT FILE [FILE ..]
-          {nameof(rcopy2)} to HOST:PORT --files-from FROM-FILE
+          {nameof(rcopy2)} to HOST:PORT --files-from FROM-FILE [FILE ..]
         Read '--files-from' (short-cut '-T') from redir console if FROM-FILE is -
 
         Syntax:
@@ -61,68 +61,80 @@ public class Program
 		return false;
 	}
 
-	static bool SendTo(string ipTarget, string[] args)
+	record FilesFrom(StreamReader Input, Action<StreamReader> CloseAction)
 	{
-		(StreamReader input, Action<StreamReader> close)
-			OpenFilesFrom(string fromFile)
+		public static FilesFrom Null = new (StreamReader.Null, (_) => { });
+		public void Close()
 		{
-			if (fromFile == "-")
+			CloseAction(Input);
+		}
+        public IEnumerable<string> GetPathsFrom()
+        {
+            while (true)
+            {
+                var lineThe = Input.ReadLine();
+                if (lineThe == null) break;
+                yield return lineThe;
+            }
+        }
+    }
+
+    static bool SendTo(string ipTarget, IEnumerable<string> args)
+	{
+		FilesFrom OpenFilesFrom(string path)
+		{
+			if (path == "-")
 			{
 				if (false == Console.IsInputRedirected)
 				{
                     PrintSyntax();
-                    return (StreamReader.Null, (_) => { });
+					return FilesFrom.Null;
                 }
-                return (new StreamReader(OpenStandardInput()), (_) => { });
+                return new FilesFrom(new StreamReader(OpenStandardInput()), (_) => { });
             }
 
-			if (false == File.Exists(fromFile))
+			if (false == File.Exists(path))
 			{
-				WriteLine($"File '{fromFile}' (--files-from) is NOT found!");
-                return (StreamReader.Null, (_) => { });
+				WriteLine($"File '{path}' (--files-from) is NOT found!");
+                return new FilesFrom(StreamReader.Null, (_) => { });
             }
-			return (File.OpenText(fromFile), (it) => it.Close());
+			return new FilesFrom(File.OpenText(path), (it) => it.Close());
 		}
 
-		Info[] infos = Array.Empty<Info>();
+		var filesFrom = FilesFrom.Null;
+        IEnumerable<string> paths = args;
 
-        if ((args.Length > 0) &&
-			((args[0] == "--files-from") || args[0] == "-T"))
+		var check2 = args.Take(2).ToArray();
+        if ((check2.Length > 0) &&
+			((check2[0] == "--files-from") || check2[0] == "-T"))
 		{
-			if (args.Length < 2)
+			if (check2.Length < 2)
 			{
 				WriteLine("Missing filename to --file-from!");
 				return false;
 			}
 
-			(var input, var closeThe) = OpenFilesFrom(args[1]);
-			if (input == StreamReader.Null)
+			filesFrom = OpenFilesFrom(check2[1]);
+			if (filesFrom.Input == StreamReader.Null)
 			{
 				return false;
 			}
 
-			infos = input.ReadToEnd()
-				.Split('\n', '\r')
+			paths = filesFrom.GetPathsFrom()
 				.Select((it) => it.Trim())
 				.Where((it) => it.Length > 0)
-				.Distinct()
-                .Select((it) => new Info(it, new FileInfo(it)))
-                .Where((it) => it.File.Exists)
-                .ToArray();
-            closeThe(input);
+				.Union(args.Skip(2));
 		}
-		else
-		{
-            infos = args
-				.Distinct()
-                .Select((it) => new Info(it, new FileInfo(it)))
-                .Where((it) => it.File.Exists)
-                .ToArray();
-        }
 
-        if (infos.Length == 0) return false;
+		IEnumerable<Info> infos = paths
+			.Distinct()
+			.Select((it) => new Info(it, new FileInfo(it)))
+			.Where((it) => it.File.Exists);
+
         var taskResult = Client.Run(ipTarget, infos);
         taskResult.Wait();
-        return taskResult.Result;
+		filesFrom.Close();
+		if (1 > taskResult.Result) WriteLine("No file is sent.");
+        return taskResult.Result > 0;
 	}
 }
