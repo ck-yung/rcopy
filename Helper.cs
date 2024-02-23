@@ -12,11 +12,12 @@ sealed class Byte2
     public const int Length = 2;
     public readonly byte[] Data = new byte[2];
 
-    public void From(UInt16 uint16)
+    public Byte2 From(UInt16 uint16)
     {
         Data[0] = (byte)(uint16 & 0xFF);
         uint16 >>= 8;
         Data[1] = (byte)(uint16 & 0xFF);
+        return this;
     }
 
     public Byte2 From(int value)
@@ -25,11 +26,7 @@ sealed class Byte2
         {
             throw new OverflowException($"Cannot pack int:{value} to UInt16!");
         }
-        UInt16 uint16 = (UInt16)value;
-        Data[0] = (byte)(uint16 & 0xFF);
-        uint16 >>= 8;
-        Data[1] = (byte)(uint16 & 0xFF);
-        return this;
+        return From((UInt16)value);
     }
 
     public UInt16 Value()
@@ -175,13 +172,13 @@ static class Log
     public static void Ok(string message)
     {
         Console.WriteLine(
-            $"{DateTime.Now.ToString("s")} {message}");
+            $"{DateTime.Now.ToString("HH:mm:ss.fff")} {message}");
     }
 
     public static void Error(string message)
     {
         Console.Error.WriteLine(
-            $"{DateTime.Now.ToString("s")} {message}");
+            $"{DateTime.Now.ToString("HH:mm:ss.fff")} {message}");
     }
 }
 
