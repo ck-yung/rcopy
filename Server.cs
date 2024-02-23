@@ -111,15 +111,39 @@ static class Server
                                 var fileName = Encoding.UTF8.GetString(buf3, 0, cntTxfr);
                                 Log.Ok($"#{idCnn} > {fileSize,10} {fileTime:s} '{fileName}'");
 
-                                cntFille += 1;
-                                sumSize += fileSize;
-
                                 if (false == await byte16.From(0).Send(socketThe,
                                     cancellationTokenSource.Token))
                                 {
-                                    Log.Error($"Fail to send response");
+                                    Log.Error($"Fail to send 1st response");
                                     break;
                                 }
+
+                                long recvSize = 0;
+                                int wantSize = 0;
+                                while (recvSize < fileSize)
+                                {
+                                    wantSize = InitBufferSize;
+                                    if ((recvSize + wantSize) > fileSize)
+                                    {
+                                        wantSize = (int) (fileSize - recvSize);
+                                    }
+                                    Log.Ok($"dbg: Recv data [1] (wantSize:{wantSize}) ..");
+                                    cntTxfr = await Helper.Recv(socketThe, buf2, wantSize,
+                                        cancellationTokenSource.Token);
+                                    Log.Ok($"dbg: Recv data {cntTxfr}b");
+                                    if (1 > cntTxfr) break;
+                                    recvSize += cntTxfr;
+                                    if (false == await byte16.From(recvSize).Send(socketThe,
+                                        cancellationTokenSource.Token))
+                                    {
+                                        Log.Error($"Fail to send response (recvSize:{recvSize}");
+                                        break;
+                                    }
+                                    Log.Ok($"#{idCnn} > {recvSize,10} RSP sent");
+                                }
+                                Log.Ok($"#{idCnn} > {recvSize,10} data recv");
+                                cntFille += 1;
+                                sumSize += recvSize;
                             }
                         }
                         catch (Exception ee)
