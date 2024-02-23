@@ -169,16 +169,25 @@ sealed class ClientQueue
 
 static class Log
 {
+    static string TimeText() => DateTime.Now.ToString("HH:mm:ss.fff");
+
     public static void Ok(string message)
     {
         Console.WriteLine(
-            $"{DateTime.Now.ToString("HH:mm:ss.fff")} {message}");
+            $"{TimeText()} {message}");
     }
 
     public static void Error(string message)
     {
         Console.Error.WriteLine(
-            $"{DateTime.Now.ToString("HH:mm:ss.fff")} {message}");
+            $"{TimeText()} {message}");
+    }
+
+    public static void Debug(string message)
+    {
+        System.Diagnostics.Debug.WriteLine(
+            $"{TimeText()} {message}");
+
     }
 }
 

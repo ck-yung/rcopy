@@ -86,7 +86,7 @@ static class Client
                 Log.Error($"Fail to read buffer size");
                 return -1;
             }
-            Log.Ok($"Code of buffer size is {codeOfBuffer}");
+            Log.Debug($"Code of buffer size is {codeOfBuffer}");
 
             foreach (var info in infos)
             {
@@ -149,7 +149,6 @@ static class Client
 
                         md5.AppendData(buf2, 0, readFileSize);
 
-                        //Log.Ok($"dbg: Sent {cntTxfr}b");
                         if (1 > cntTxfr) break;
                         sentSize += cntTxfr;
                         (statusTxfr, rsp16) = await byte16.Receive(socketThe,
@@ -176,6 +175,7 @@ static class Client
                         break;
                     }
 
+                    #region MD5
                     var hash = md5.GetCurrentHash();
                     wantSentSize = hash.Length;
                     if (wantSentSize > 0)
@@ -190,11 +190,8 @@ static class Client
                             Log.Error($"Fail to MD5!");
                             break;
                         }
-                        //var md5Result = BitConverter.ToString(hash)
-                        //    .Replace("-", "")
-                        //    .ToLower();
-                        //Log.Ok($"MD5 '{md5Result}' <- '{info.Name}'");
                     }
+                    #endregion
                 }
                 catch (Exception ee2)
                 {
@@ -205,7 +202,7 @@ static class Client
                 sumSize += info.File.Length;
                 sumSent += sentSize;
             }
-            Log.Ok($"sentCntFile:{cntFile}");
+            Log.Debug($"sentCntFile:{cntFile}");
             serverThe.Client.Shutdown(SocketShutdown.Both);
             Task.Delay(20).Wait();
             serverThe.Client.Close();

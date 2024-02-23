@@ -10,6 +10,30 @@ static class Server
     public const UInt16 CodeOfBuffer = 2;
     public static bool Run(string ipServer, IEnumerable<string> args)
     {
+        (var outdir, _) = Options.Get("--out-dir",
+            args.Select((it) => new FlagedArg(false, it)));
+
+        Func<string, string> ToStandardDirSep =
+            (it) => it.Replace('/', '\\');
+        if (Path.DirectorySeparatorChar == '/')
+        {
+            ToStandardDirSep = (it) => it.Replace('\\', '/');
+        }
+
+        Func<string, string> ToOutputFilename =
+            (it) => ToStandardDirSep(it);
+        if (false == string.IsNullOrEmpty(outdir))
+        {
+            if (false == Directory.Exists(outdir))
+            {
+                throw new ArgumentException(
+                    $"Output dir '{outdir}' is NOT found!");
+            }
+            Console.WriteLine($"Output dir is '{outdir}'");
+            ToOutputFilename = (it) => Path.Join(outdir,
+                ToStandardDirSep(it));
+        }
+
         var cancellationTokenSource = new CancellationTokenSource();
 
         var endPointThe = ParseIpEndpoint(ipServer);
@@ -83,7 +107,7 @@ static class Server
                                 {
                                     break;
                                 }
-                                DateTimeOffset fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp16);
+                                var fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp16);
 
                                 (statusTxfr, tmp16) = await byte16.Receive(clSocket,
                                     cancellationTokenSource.Token);
@@ -102,8 +126,7 @@ static class Server
                                     break;
                                 }
 
-                                System.Diagnostics.Debug.WriteLine(
-                                    $"Read length-of-file-name:{sizeWant}");
+                                Log.Debug($"Read length-of-file-name:{sizeWant}");
                                 cntTxfr = await Helper.Recv(socketThe, buf3,
                                     sizeWant, cancellationTokenSource.Token);
                                 if (cntTxfr != sizeWant)
@@ -111,10 +134,9 @@ static class Server
                                     Log.Ok($"Read file-name failed! (want:{sizeWant} but real:{cntTxfr})");
                                     break;
                                 }
-                                System.Diagnostics.Debug.WriteLine(
-                                    $"{DateTime.Now.ToString("s")} Recv {cntTxfr} bytes");
                                 var fileName = Encoding.UTF8.GetString(buf3, 0, cntTxfr);
-                                Log.Ok($"#{idCnn} > {fileSizeWant,10} {fileTime:s} '{fileName}'");
+                                Log.Debug($"#{idCnn} > {fileSizeWant,10} {fileTime:s} '{fileName}'");
+                                Log.Ok($"#{idCnn} > {fileName}");
 
                                 if (false == await byte16.From(0).Send(socketThe,
                                     cancellationTokenSource.Token))
@@ -123,69 +145,80 @@ static class Server
                                     break;
                                 }
 
+                                var outputRealFilename = ToOutputFilename(fileName);
+                                Log.Debug($"output file = '{outputRealFilename}'");
+                                var outputShadowFilename = ToOutputFilename(
+                                    "rcopy2_" + DateTime.Now.ToString("yyyy-MMdd_HHmm-ffff")+ ".tmp");
+                                int tryCnt = 0;
+                                while (File.Exists(outputShadowFilename))
+                                {
+                                    tryCnt += 1;
+                                    outputShadowFilename = ToOutputFilename(
+                                    "rcopy2_" + DateTime.Now.ToString("yyyy-MMdd_HHmm-ffff") + $".{tryCnt}.tmp");
+                                }
+                                Log.Debug($"shadow file = '{outputShadowFilename}'");
+
                                 int wantSize = 0;
                                 fileSizeRecv = 0;
                                 var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
-                                while (true) // (recvSize < fileSize)
+                                using (var outFs = File.Create(outputShadowFilename))
                                 {
-                                    (statusTxfr, tmp02) = await byte02.Receive(
-                                        socketThe, cancellationTokenSource.Token);
-                                    if (false == statusTxfr)
-                                    {
-                                        Log.Error($"Read code-of-buffer failed!");
-                                        break;
-                                    }
-                                    if (tmp02 == CodeOfBuffer)
-                                    {
-                                        //Log.Ok($"Recv code-of-buffer as init");
-                                        wantSize = InitBufferSize;
-                                    }
-                                    else
+                                    while (fileSizeWant >= fileSizeRecv)
                                     {
                                         (statusTxfr, tmp02) = await byte02.Receive(
                                             socketThe, cancellationTokenSource.Token);
                                         if (false == statusTxfr)
                                         {
-                                            //Log.Ok($"Read buffer-size failed!");
+                                            Log.Error($"Read code-of-buffer failed!");
                                             break;
                                         }
-                                        //Log.Ok($"Recv buffer-size {tmp02}");
-                                        wantSize = tmp02;
+                                        if (tmp02 == CodeOfBuffer)
+                                        {
+                                            wantSize = InitBufferSize;
+                                        }
+                                        else
+                                        {
+                                            (statusTxfr, tmp02) = await byte02.Receive(
+                                                socketThe, cancellationTokenSource.Token);
+                                            if (false == statusTxfr)
+                                            {
+                                                break;
+                                            }
+                                            wantSize = tmp02;
+                                        }
+
+                                        if (wantSize == 0) break;
+
+                                        cntTxfr = await Helper.Recv(socketThe, buf2, wantSize,
+                                            cancellationTokenSource.Token);
+                                        if (1 > cntTxfr) break;
+                                        fileSizeRecv += cntTxfr;
+
+                                        md5.AppendData(buf2, 0, cntTxfr);
+
+                                        outFs.Write(buf2, 0, cntTxfr);
+
+                                        if (false == await byte16.From(fileSizeRecv).Send(socketThe,
+                                            cancellationTokenSource.Token))
+                                        {
+                                            Log.Error($"Fail to send response (recvSize:{fileSizeRecv}");
+                                            break;
+                                        }
                                     }
-
-                                    if (wantSize == 0) break;
-
-                                    //Log.Ok($"dbg: Recv data [1] (wantSize:{wantSize}) ..");
-                                    cntTxfr = await Helper.Recv(socketThe, buf2, wantSize,
-                                        cancellationTokenSource.Token);
-                                    //Log.Ok($"dbg: Recv data {cntTxfr}b");
-                                    if (1 > cntTxfr) break;
-                                    fileSizeRecv += cntTxfr;
-
-                                    md5.AppendData(buf2, 0, cntTxfr);
-
-                                    if (false == await byte16.From(fileSizeRecv).Send(socketThe,
-                                        cancellationTokenSource.Token))
-                                    {
-                                        Log.Error($"Fail to send response (recvSize:{fileSizeRecv}");
-                                        break;
-                                    }
-                                    //Log.Ok($"#{idCnn} > {fileSizeRecv,10} RSP sent");
                                 }
-                                //Log.Ok($"#{idCnn} > {fileSizeRecv,10} data recv");
+
                                 cntFille += 1;
                                 sumSize += fileSizeRecv;
-                                //Log.Ok($"Recv data completed (want:{fileSizeWant};real:{fileSizeRecv})");
                                 if (fileSizeWant!= fileSizeRecv)
                                 {
                                     Log.Error($"#{idCnn} > fileSizeRecv:{fileSizeRecv}b but want:{fileSizeWant}b");
                                 }
 
+                                #region MD5
                                 (statusTxfr, tmp02) = await byte02.Receive(socketThe,
                                     cancellationTokenSource.Token);
                                 if (false == statusTxfr)
                                 {
-                                    //Log.Ok($"Read MD5 size failed!");
                                     break;
                                 }
                                 if (1 > tmp02)
@@ -195,12 +228,6 @@ static class Server
                                 }
                                 cntTxfr = await Helper.Recv(socketThe, buf2, tmp02,
                                     cancellationTokenSource.Token);
-                                //Log.Ok($"dbg: Recv MD5 {cntTxfr}b");
-                                //var md5Recv = BitConverter
-                                //.ToString(buf2, startIndex:0, length: tmp02)
-                                //.Replace("-", "")
-                                //.ToLower();
-                                //Log.Ok($"#{idCnn} MD5 '{md5Recv}' <- '{fileName}'");
                                 if (cntTxfr > 0)
                                 {
                                     var hash = md5.GetCurrentHash();
@@ -216,6 +243,23 @@ static class Server
                                         Log.Error($"MD5 is mis-matched! Data:{md5The} but Recv:{md5Recv}");
                                     }
                                 }
+                                #endregion
+
+                                #region Rename outputShadowFilename to outputRealFilename
+                                if (File.Exists(outputShadowFilename) &&
+                                false == File.Exists(outputRealFilename))
+                                {
+                                    var dirThe = Path.GetDirectoryName(outputRealFilename);
+                                    if (false == string.IsNullOrEmpty(dirThe) &&
+                                    false == Directory.Exists(dirThe))
+                                    {
+                                        Directory.CreateDirectory(dirThe);
+                                    }
+                                    File.Move(outputShadowFilename, outputRealFilename);
+                                    File.SetLastWriteTime(path: outputRealFilename,
+                                        lastWriteTime: fileTime.DateTime);
+                                }
+                                #endregion
                             }
                         }
                         catch (Exception ee)
