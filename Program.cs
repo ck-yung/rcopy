@@ -133,8 +133,8 @@ public class Program
 			.Where((it) => it.File.Exists);
 
         var taskResult = Client.Run(ipTarget, infos);
-        taskResult.Wait();
-		filesFrom.Close();
+		taskResult.Wait();
+        filesFrom.Close();
 		if (1 > taskResult.Result) WriteLine("No file is sent.");
         return taskResult.Result > 0;
 	}

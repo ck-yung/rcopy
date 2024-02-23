@@ -110,7 +110,7 @@ static class Server
                             UInt16 sizeWant = 0;
                             var buf2 = new byte[InitBufferSize];
 
-                            if (false == await byte02.From(ControlCode).Send(socketThe,
+                            if (false == await byte02.As(ControlCode).Send(socketThe,
                                 cancellationTokenSource.Token))
                             {
                                 Log.Error($"Fail to send the code of buffer size");
@@ -180,7 +180,7 @@ static class Server
                                 Log.Debug($"#{idCnn} > {fileSizeWant,10} {fileTime:s} '{fileName}'");
                                 Log.Ok($"#{idCnn} > {fileName}");
 
-                                if (false == await byte16.From(0).Send(socketThe,
+                                if (false == await byte16.As(0).Send(socketThe,
                                     cancellationTokenSource.Token))
                                 {
                                     Log.Error($"Fail to send 1st response");
@@ -188,7 +188,7 @@ static class Server
                                 }
 
                                 var outputRealFilename = ToOutputFilename(fileName);
-                                Log.Debug($"output file = '{outputRealFilename}'");
+                                Log.Debug($"Real output file = '{outputRealFilename}'");
 
                                 var prefixShadowFilename = "rcopy2_"
                                 + Path.GetFileName(fileName)
@@ -240,16 +240,16 @@ static class Server
                                         if (1 > cntTxfr) break;
                                         fileSizeRecv += cntTxfr;
 
-                                        md5.Add(buf2, cntTxfr);
-
-                                        outFs.Write(buf2, 0, cntTxfr);
-
-                                        if (false == await byte16.From(fileSizeRecv).Send(socketThe,
+                                        if (false == await byte16.As(fileSizeRecv).Send(socketThe,
                                             cancellationTokenSource.Token))
                                         {
                                             Log.Error($"Fail to send response (recvSize:{fileSizeRecv}");
                                             break;
                                         }
+
+                                        md5.Add(buf2, cntTxfr);
+
+                                        outFs.Write(buf2, 0, cntTxfr);
                                     }
                                 }
 

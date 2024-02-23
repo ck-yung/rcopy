@@ -9,59 +9,102 @@ static class Client
     {
         var cancellationTokenSource = new CancellationTokenSource();
 
-        int cntTxfr = 0;
         bool statusTxfr = false;
         var byte02 = new Byte2();
         var byte16 = new Byte16();
-        long rsp16 = 0;
         var buf2 = new byte[InitBufferSize];
 
-        async Task<bool> SendFileInfo(Socket socket, Info info)
+        async Task<int> SendFileInfo(Socket socket, Info info)
         {
             var byte16 = new Byte16();
 
             long tmp2 = new DateTimeOffset(info.File.LastWriteTimeUtc).ToUnixTimeSeconds();
-            if (false == await byte16.From(tmp2).Send(socket, cancellationTokenSource.Token))
+            if (false == await byte16.As(tmp2).Send(socket, cancellationTokenSource.Token))
             {
                 Log.Error($"Fail to send date-time");
-                return false;
+                return 0;
             }
 
             tmp2 = info.File.Length;
-            if (false == await byte16.From(tmp2).Send(socket, cancellationTokenSource.Token))
+            if (false == await byte16.As(tmp2).Send(socket, cancellationTokenSource.Token))
             {
                 Log.Error($"Fail to send file-size");
-                return false;
+                return 0;
             }
 
             var buf2 = Encoding.UTF8.GetBytes(info.Name);
-            byte02.From(buf2.Length);
+            byte02.As(buf2.Length);
             if (false == await byte02.Send(socket, cancellationTokenSource.Token))
             {
                 Log.Error($"Fail to send name-size");
-                return false;
+                return 0;
             }
 
-            cntTxfr = await Send(socket, buf2, buf2.Length,
+            int cntTxfr = await Send(socket, buf2, buf2.Length,
                 cancellationTokenSource.Token);
             if (cntTxfr != buf2.Length)
             {
                 Log.Error($"Sent message error!, want={buf2.Length} but real={cntTxfr}");
-                return false;
+                return 0;
             }
 
-            (statusTxfr, rsp16) = await byte16.Receive(socket,
+            (statusTxfr, var rsp16) = await byte16.Receive(socket,
                 cancellationTokenSource.Token);
-            if (false == statusTxfr)
+            if ((false == statusTxfr) || (rsp16!=0))
             {
-                Log.Error($"Fail to read response");
-                return false;
+                Log.Error($"Error info response (status:{statusTxfr};RSP:{rsp16})");
+                return 0;
             }
-            if (0!=rsp16)
+            return cntTxfr + 32;
+        }
+
+        Socket socketThe;
+        long sentSizeThe = 0;
+        int wantSize = 0;
+        int readRealSize = 0;
+        UInt16 codeOfBuffer = 0;
+        async Task<int> SendAndGetResponse()
+        {
+            if (readRealSize == InitBufferSize)
             {
-                Log.Ok($"RSP < {rsp16}");
+                if (false == await byte02.As(codeOfBuffer).Send(socketThe, cancellationTokenSource.Token))
+                {
+                    Log.Error($"Fail to send init code!");
+                    return 0;
+                }
+                //Log.Ok("Send codeOfBuffer ok");
             }
-            return (rsp16 == 0);
+            else
+            {
+                if (false == await byte02.As(0).Send(socketThe, cancellationTokenSource.Token))
+                {
+                    Log.Error($"Fail to send last init code!");
+                    return 0;
+                }
+                if (false == await byte02.As(readRealSize).Send(socketThe, cancellationTokenSource.Token))
+                {
+                    Log.Error($"Fail to send last data-size {readRealSize}b");
+                    return 0;
+                }
+                //Log.Ok($"Send last buffer size {readRealSize} ok");
+            }
+
+            var sendTask = Helper.Send(socketThe, buf2, readRealSize,
+                cancellationTokenSource.Token);
+            sendTask.Wait();
+            int cntTxfr = sendTask.Result;
+            //Log.Ok($"Send buffer real:{cntTxfr}b; want:{readRealSize}b [sentSizeThe:{sentSizeThe}]");
+
+            if (1 > cntTxfr) return 0;
+            sentSizeThe += cntTxfr;
+            (statusTxfr, var rsp16) = await byte16.Receive(socketThe,
+                cancellationTokenSource.Token);
+            if ((false == statusTxfr) || (rsp16 != sentSizeThe))
+            {
+                Log.Error($"RSP to SendAndGetResponse: (status:{statusTxfr}; RSP:{rsp16} but want:{sentSizeThe})");
+            }
+            //else Log.Ok($"RSP ok {rsp16}");
+            return cntTxfr;
         }
 
         int cntFile = 0;
@@ -75,7 +118,7 @@ static class Client
         {
             await serverThe.ConnectAsync(endPointThe, connectTimeout.Token);
             Log.Ok("Connected");
-            var socketThe = serverThe.Client;
+            socketThe = serverThe.Client;
 
             (statusTxfr, var controlCode) = await byte02.Receive(socketThe,
                 cancellationTokenSource.Token);
@@ -86,98 +129,58 @@ static class Client
             }
             var upperControlFlag = (controlCode & 0xFF00);
             var md5Flag = (upperControlFlag & Md5Required) == Md5Required;
-            Log.Ok($"Upper Control:{upperControlFlag:x4}, Md5:{md5Flag}");
-            UInt16 codeOfBuffer = (UInt16)(controlCode & (UInt16) 0x00FF);
+            //Log.Ok($"Upper Control:{upperControlFlag:x4}, Md5:{md5Flag}");
+            codeOfBuffer = (UInt16)(controlCode & (UInt16) 0x00FF);
 
-            if (false == await byte02.From(controlCode).Send(socketThe, cancellationTokenSource.Token))
+            if (false == await byte02.As(controlCode).Send(socketThe, cancellationTokenSource.Token))
             {
                 Log.Error($"Fail to reply control code!");
                 return -1;
             }
-            Log.Ok($"Reply Control Code x{codeOfBuffer:x4} ");
 
             foreach (var info in infos)
             {
-                if (info.File.Length < 1)
-                {
-                    Log.Ok($"Skip empty file '{info.Name}'");
-                    continue;
-                }
-                if (false == await SendFileInfo(socketThe, info))
+                if (0 == await SendFileInfo(socketThe, info))
                 {
                     break;
                 }
 
-                long sentSize = 0;
-                int wantSentSize = 0;
+                Task<int> readTask;
+                Task<int> sendTask;
+                sentSizeThe = 0;
                 try
                 {
                     var md5 = Md5Factory.Make(md5Flag);
                     using var inpFile = File.OpenRead(info.Name);
-                    while (sentSize < info.File.Length)
+                    //Log.Ok($"{info.Name} size {info.File.Length}b");
+                    while (sentSizeThe < info.File.Length)
                     {
-                        wantSentSize = InitBufferSize;
-                        if ((sentSize + wantSentSize) > info.File.Length)
+                        wantSize = InitBufferSize;
+                        if ((sentSizeThe + wantSize) > info.File.Length)
                         {
-                            wantSentSize = (int)(info.File.Length - sentSize);
+                            wantSize = (int)(info.File.Length - sentSizeThe);
                         }
-                        if (1 > wantSentSize) break;
+                        if (1 > wantSize) break;
 
-                        int readFileSize = inpFile.Read(buf2, 0, wantSentSize);
-                        if (readFileSize != wantSentSize)
-                        {
-                            Log.Error(
-                                $"Fail to read file '{info.Name}' at offset {sentSize} (want:{wantSentSize}b but real:{readFileSize}b)");
-                        }
-
-                        if (wantSentSize == InitBufferSize)
-                        {
-                            if (false == await byte02.From(codeOfBuffer).Send(socketThe, cancellationTokenSource.Token))
-                            {
-                                Log.Error($"Fail to send init code!");
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            if (false == await byte02.From(0).Send(socketThe, cancellationTokenSource.Token))
-                            {
-                                Log.Error($"Fail to send last init code!");
-                                break;
-                            }
-                            if (false == await byte02.From(wantSentSize).Send(socketThe, cancellationTokenSource.Token))
-                            {
-                                Log.Error($"Fail to send last data-size {wantSentSize}b");
-                                break;
-                            }
-                        }
-
-                        cntTxfr = await Helper.Send(socketThe, buf2, wantSentSize,
+                        readTask = Helper.Read(inpFile, buf2, wantSize,
                             cancellationTokenSource.Token);
+                        readTask.Wait();
+                        readRealSize = readTask.Result;
+                        //Log.Ok($"{info.Name} read {readRealSize}b");
 
-                        md5.Add(buf2, readFileSize);
+                        md5.Add(buf2, readRealSize);
 
-                        if (1 > cntTxfr) break;
-                        sentSize += cntTxfr;
-                        (statusTxfr, rsp16) = await byte16.Receive(socketThe,
-                            cancellationTokenSource.Token);
-                        if (false == statusTxfr)
-                        {
-                            Log.Error($"Fail to read response");
-                            break;
-                        }
-                        if (rsp16 != sentSize)
-                        {
-                            Log.Ok($"Recv unknown rsp {rsp16} at sentSize:{sentSize} !");
-                        }
+                        sendTask = SendAndGetResponse();
+                        sendTask.Wait();
+                        //Log.Ok($"{info.Name} recv {sendTask.Result} < RSP (sentSize:{sentSizeThe}b)");
                     }
 
-                    if (false == await byte02.From(0).Send(socketThe, cancellationTokenSource.Token))
+                    if (false == await byte02.As(0).Send(socketThe, cancellationTokenSource.Token))
                     {
                         Log.Error($"Fail to send end block!");
                         break;
                     }
-                    if (false == await byte02.From(0).Send(socketThe, cancellationTokenSource.Token))
+                    if (false == await byte02.As(0).Send(socketThe, cancellationTokenSource.Token))
                     {
                         Log.Error($"Fail to send end data-size!");
                         break;
@@ -185,15 +188,15 @@ static class Client
 
                     #region MD5
                     var hash = md5.Get();
-                    wantSentSize = hash.Length;
-                    if (wantSentSize > 0)
+                    wantSize = hash.Length;
+                    if (wantSize > 0)
                     {
-                        if (false == await byte02.From(wantSentSize).Send(socketThe, cancellationTokenSource.Token))
+                        if (false == await byte02.As(wantSize).Send(socketThe, cancellationTokenSource.Token))
                         {
                             Log.Error($"Fail to send MD5 size!");
                             break;
                         }
-                        if (wantSentSize != await Helper.Send(socketThe, hash, wantSentSize, cancellationTokenSource.Token))
+                        if (wantSize != await Helper.Send(socketThe, hash, wantSize, cancellationTokenSource.Token))
                         {
                             Log.Error($"Fail to MD5!");
                             break;
@@ -208,7 +211,7 @@ static class Client
 
                 cntFile += 1;
                 sumSize += info.File.Length;
-                sumSent += sentSize;
+                sumSent += sentSizeThe;
             }
             Log.Debug($"sentCntFile:{cntFile}");
             serverThe.Client.Shutdown(SocketShutdown.Both);
@@ -225,6 +228,7 @@ static class Client
         {
             Log.Error($"Error! {ee}");
         }
+
         return cntFile;
     }
 }

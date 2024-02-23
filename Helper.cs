@@ -13,7 +13,7 @@ sealed class Byte2
     public const int Length = 2;
     public readonly byte[] Data = new byte[2];
 
-    public Byte2 From(UInt16 uint16)
+    public Byte2 As(UInt16 uint16)
     {
         Data[0] = (byte)(uint16 & 0xFF);
         uint16 >>= 8;
@@ -21,13 +21,13 @@ sealed class Byte2
         return this;
     }
 
-    public Byte2 From(int value)
+    public Byte2 As(int value)
     {
         if (value > UInt16.MaxValue)
         {
             throw new OverflowException($"Cannot pack int:{value} to UInt16!");
         }
-        return From((UInt16)value);
+        return As((UInt16)value);
     }
 
     public UInt16 Value()
@@ -54,58 +54,12 @@ sealed class Byte2
     }
 }
 
-sealed class Byte8
-{
-    public readonly int Length = 8;
-    public readonly byte[] Data = new byte[8];
-
-    public Byte8 From(int value)
-    {
-        Data[0] = (byte)(value & 0xFF);
-        value >>= 8;
-        Data[1] = (byte)(value & 0xFF);
-        value >>= 8;
-        Data[2] = (byte)(value & 0xFF);
-        value >>= 8;
-        Data[3] = (byte)(value & 0xFF);
-        value >>= 8;
-        Data[4] = (byte)(value & 0xFF);
-        value >>= 8;
-        Data[5] = (byte)(value & 0xFF);
-        value >>= 8;
-        Data[6] = (byte)(value & 0xFF);
-        value >>= 8;
-        Data[7] = (byte)(value & 0xFF);
-        return this;
-    }
-
-    public int Value()
-    {
-        int rtn = Data[7];
-        rtn <<= 8;
-        rtn += Data[6];
-        rtn <<= 8;
-        rtn += Data[5];
-        rtn <<= 8;
-        rtn += Data[4];
-        rtn <<= 8;
-        rtn += Data[3];
-        rtn <<= 8;
-        rtn += Data[2];
-        rtn <<= 8;
-        rtn += Data[1];
-        rtn <<= 8;
-        rtn += Data[0];
-        return rtn;
-    }
-}
-
 sealed class Byte16
 {
     public readonly int Length = 16;
     public readonly byte[] Data = new byte[16];
 
-    public Byte16 From(long value)
+    public Byte16 As(long value)
     {
         Data[0] = (byte)(value & 0xFF);
         for (int ii = 1; ii < 16; ii += 1)
@@ -181,7 +135,7 @@ static class Log
     public static void Error(string message)
     {
         Console.Error.WriteLine(
-            $"{TimeText()} {message}");
+            $"Error: {TimeText()} {message}");
     }
 
     public static void Debug(string message)
@@ -271,7 +225,6 @@ static partial class Helper
             offset += cntTxfr;
             wantSize2 -= cntTxfr;
         }
-        //Log.Ok($"Helper.Recv {rtn}b (want:{wantSize})");
         return rtn;
     }
 
@@ -292,7 +245,6 @@ static partial class Helper
             offset += cntTxfr;
             wantSize2 -= cntTxfr;
         }
-        //Log.Ok($"Helper.Send {rtn}b (want:{wantSize})");
         return rtn;
     }
 
@@ -303,6 +255,24 @@ static partial class Helper
         for (int ii = 0; ii < length; ii++)
             if (the[ii] != other[ii]) return false;
         return true;
+    }
+
+    public static async Task<int> Read(FileStream stream,
+        byte[] data, int wantSize, CancellationToken token)
+    {
+        int rtn = 0;
+        int offset = 0;
+        int wantSize2 = wantSize;
+        int cntTxfr;
+        while (0 < wantSize2)
+        {
+            cntTxfr = await stream.ReadAsync(data, offset, wantSize2, token);
+            if (cntTxfr < 1) break;
+            rtn += cntTxfr;
+            offset += cntTxfr;
+            wantSize2 -= cntTxfr;
+        }
+        return rtn;
     }
 }
 
