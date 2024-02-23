@@ -147,21 +147,24 @@ sealed class Byte16
 
 sealed class ClientQueue
 {
-    Queue<Socket> Queue = new();
+    Queue<(int,Socket)> Queue = new();
+    int AddCount = 0;
 
-    public void Add(Socket socket)
+    public int Add(Socket socket)
     {
         lock (this)
         {
-            Queue.Enqueue(socket);
+            AddCount++;
+            Queue.Enqueue((AddCount,socket));
+            return AddCount;
         }
     }
 
-    public Socket? Get()
+    public (int, Socket?) Get()
     {
         lock (this)
         {
-            if (Queue.Count == 0) return null;
+            if (Queue.Count == 0) return (0, null);
             return Queue.Dequeue();
         }
     }

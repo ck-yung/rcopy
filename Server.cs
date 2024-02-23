@@ -40,7 +40,7 @@ static class Server
 
                     _ = Task.Run(async () =>
                     {
-                        var socketThe = socketQueue.Get();
+                        (var idCnn, var socketThe) = socketQueue.Get();
                         if (socketThe == null)
                         {
                             Log.Error("Error! No client connection is found!");
@@ -48,7 +48,7 @@ static class Server
                         }
 
                         var remoteEndPoint = socketThe.RemoteEndPoint;
-                        Log.Ok($"'{remoteEndPoint}' connected");
+                        Log.Ok($"#{idCnn} '{remoteEndPoint}' connected");
 
                         var sizeThe = new Byte2();
                         var tmp3 = new Byte16();
@@ -60,7 +60,7 @@ static class Server
                             UInt16 sizeWant = 0;
                             var buf2 = new byte[InitBufferSize];
 
-                            if (false == await sizeThe.From(1).Send(socketThe,
+                            if (false == await sizeThe.From(2).Send(socketThe,
                                 cancellationTokenSource.Token))
                             {
                                 Log.Error($"Fail to send the code of buffer size");
@@ -106,7 +106,7 @@ static class Server
                                 System.Diagnostics.Debug.WriteLine(
                                     $"{DateTime.Now.ToString("s")} Recv {cntTxfr} bytes");
                                 var fileName = Encoding.UTF8.GetString(buf3, 0, cntTxfr);
-                                Log.Ok($"'{remoteEndPoint}' > {fileSize,10} {fileTime:s} '{fileName}'");
+                                Log.Ok($"#{idCnn} > {fileSize,10} {fileTime:s} '{fileName}'");
 
                                 if (false == await sizeThe.From(0).Send(socketThe,
                                     cancellationTokenSource.Token))
@@ -118,11 +118,11 @@ static class Server
                         }
                         catch (Exception ee)
                         {
-                            Log.Error($"'{remoteEndPoint}' {ee}");
+                            Log.Error($"#{idCnn} '{remoteEndPoint}' {ee}");
                         }
                         finally
                         {
-                            Log.Ok($"'{remoteEndPoint}' dropped");
+                            Log.Ok($"#{idCnn} '{remoteEndPoint}' dropped");
                             await Task.Delay(20);
                             socketThe.Shutdown(SocketShutdown.Both);
                             await Task.Delay(20);
