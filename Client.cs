@@ -102,26 +102,40 @@ static class Client
 
                 long sentSize = 0;
                 int wantSentSize = 0;
-                while (sentSize < info.File.Length)
+                try
                 {
-                    wantSentSize = InitBufferSize;
-                    if ((sentSize + wantSentSize) > info.File.Length)
+                    using var inpFile = File.OpenRead(info.Name);
+                    while (sentSize < info.File.Length)
                     {
-                        wantSentSize = (int)(info.File.Length - sentSize);
+                        wantSentSize = InitBufferSize;
+                        if ((sentSize + wantSentSize) > info.File.Length)
+                        {
+                            wantSentSize = (int)(info.File.Length - sentSize);
+                        }
+                        int readFileSize = inpFile.Read(buf2, 0, wantSentSize);
+                        if (readFileSize != wantSentSize)
+                        {
+                            Log.Error(
+                                $"Fail to read file '{info.Name}' at offset {sentSize} (want:{wantSentSize}b but real:{readFileSize}b)");
+                        }
+                        cntTxfr = await Helper.Send(socketThe, buf2, wantSentSize,
+                            cancellationTokenSource.Token);
+                        Log.Ok($"dbg: Sent {cntTxfr}b");
+                        if (1 > cntTxfr) break;
+                        sentSize += cntTxfr;
+                        (statusTxfr, rsp16) = await byte16.Receive(socketThe,
+                            cancellationTokenSource.Token);
+                        if (false == statusTxfr)
+                        {
+                            Log.Error($"Fail to read response");
+                            break;
+                        }
+                        Log.Ok($"Recv rsp {rsp16} (sentSize:{sentSize})");
                     }
-                    cntTxfr = await Helper.Send(socketThe, buf2, wantSentSize,
-                        cancellationTokenSource.Token);
-                    Log.Ok($"dbg: Sent {cntTxfr}b");
-                    if (1 > cntTxfr) break;
-                    sentSize += cntTxfr;
-                    (statusTxfr, rsp16) = await byte16.Receive(socketThe,
-                        cancellationTokenSource.Token);
-                    if (false == statusTxfr)
-                    {
-                        Log.Error($"Fail to read response");
-                        break;
-                    }
-                    Log.Ok($"Recv rsp {rsp16} (sentSize:{sentSize})");
+                }
+                catch (Exception ee2)
+                {
+                    Log.Error($"'{info.Name}' {ee2}");
                 }
 
                 cntFile += 1;
