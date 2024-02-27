@@ -35,7 +35,7 @@ static class Server
         #endregion
 
         UInt16 ControlCode = CodeOfBuffer;
-        #region MD5 Flag
+        #region --md5
         (var md5CtrlText, argsRest) = Options.Get("--md5", argsRest);
         var md5Flag = true;
         if (md5CtrlText == "off")
@@ -50,7 +50,23 @@ static class Server
         else
         {
             throw new ArgumentException(
-                $"Value to '--md5' should be 'on' or 'off' but not '{md5CtrlText}");
+                $"Value to '--md5' should be 'on' or 'off' but not '{md5CtrlText}'");
+        }
+        #endregion
+
+        #region --no-dir
+        (var noDir, argsRest) = Options.Get("--no-dir", argsRest);
+        if (false == string.IsNullOrEmpty(md5CtrlText))
+        {
+            if (noDir == "on")
+            {
+                ToOutputFilename = (path) => Path.GetFileName(path);
+            }
+            else if (noDir != "off")
+            {
+                throw new ArgumentException(
+                    $"Value to '--no-dir' should be 'on' or 'off' but not '{noDir}'");
+            }
         }
         #endregion
 
@@ -221,6 +237,7 @@ static class Server
                                         if (tmp02 == CodeOfBuffer)
                                         {
                                             wantSize = InitBufferSize;
+                                            Log.Debug($"recv CodeOfBuffer");
                                         }
                                         else
                                         {
@@ -231,12 +248,14 @@ static class Server
                                                 break;
                                             }
                                             wantSize = tmp02;
+                                            Log.Debug($"recv wantSize:{tmp02}b");
                                         }
 
                                         if (wantSize == 0) break;
 
                                         cntTxfr = await Helper.Recv(socketThe, buf2, wantSize,
                                             cancellationTokenSource.Token);
+                                        Log.Debug($"recv realSize:{cntTxfr}b");
                                         if (1 > cntTxfr) break;
                                         fileSizeRecv += cntTxfr;
 
@@ -247,7 +266,7 @@ static class Server
                                             break;
                                         }
 
-                                        md5.Add(buf2, cntTxfr);
+                                        md5.AddData(buf2, cntTxfr);
 
                                         outFs.Write(buf2, 0, cntTxfr);
                                     }

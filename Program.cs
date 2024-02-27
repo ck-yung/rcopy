@@ -10,6 +10,7 @@ public class Program
     {
 		try
 		{
+			Log.Init();
             _ = RunMainAsync(args);
 		}
 		catch (ArgumentException ae)
@@ -53,7 +54,7 @@ public class Program
         Read '--files-from' (short-cut '-T') from redir console if FROM-FILE is -
 
         Syntax:
-          {nameof(rcopy2)} on HOST:PORT [--out-dir OUT-DIR] [--md5 FLAG]
+          {nameof(rcopy2)} on HOST:PORT [--out-dir OUT-DIR] [--no-dir FLAG] [--md5 FLAG]
 
         where
           HOST is an IP or a DNS host name

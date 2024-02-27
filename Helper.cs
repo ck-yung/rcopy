@@ -138,11 +138,22 @@ static class Log
             $"Error: {TimeText()} {message}");
     }
 
-    public static void Debug(string message)
-    {
-        System.Diagnostics.Debug.WriteLine(
-            $"{TimeText()} {message}");
+    public static Action<string> Debug { get; internal set; }
+        = (_) => { };
 
+    public static void Init()
+    {
+        if (System.Diagnostics.Debugger.IsAttached)
+        {
+            Debug = (message) =>
+            System.Diagnostics.Debug
+            .WriteLine($"{TimeText()} {message}");
+        }
+        else
+        {
+            Debug = (message) =>
+            Console.Error.WriteLine($"dbg: {TimeText()} {message}");
+        }
     }
 }
 
@@ -279,7 +290,7 @@ static partial class Helper
 internal interface IMD5
 {
     string GetName();
-    void Add(byte[] data, int length);
+    void AddData(byte[] data, int length);
     byte[] Get();
 }
 
@@ -289,8 +300,16 @@ internal static class Md5Factory
     {
         readonly IncrementalHash Md5 = IncrementalHash
             .CreateHash(HashAlgorithmName.MD5);
-        public void Add(byte[] data, int length)
+        public void AddData(byte[] data, int length)
         {
+            if (length > 4)
+            {
+                Log.Debug($"Md5Real.AddData(length:{length}) {data[0]:X2}.{data[1]}:X2.{data[2]:X2}.{data[3]:X2}");
+            }
+            else
+            {
+                Log.Debug($"Md5Real.AddData(length:{length})");
+            }
             Md5.AppendData(data, 0, length);
         }
         public byte[] Get()
@@ -302,7 +321,7 @@ internal static class Md5Factory
 
     class Md5Fake : IMD5
     {
-        public void Add(byte[] data, int length) { }
+        public void AddData(byte[] data, int length) { }
         public byte[] Get() => Array.Empty<byte>();
         public string GetName() => "Fake";
     }
