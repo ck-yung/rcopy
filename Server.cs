@@ -60,7 +60,32 @@ static class Server
         #endregion
 
         byte codeOfBuffserSize = Helper.DefaultCodeOfBufferSize;
+        #region --buffer-size
+        (var codeOfBufferText, argsRest) = Options.Get("--buffer-size", argsRest);
+        switch (codeOfBufferText)
+        {
+            case "":
+                codeOfBuffserSize = Helper.DefaultCodeOfBufferSize;
+                break;
+            case "1": // 8K
+                codeOfBuffserSize = 1;
+                break;
+            case "2": // 16K
+                codeOfBuffserSize = 2;
+                break;
+            case "3": // 32K
+                codeOfBuffserSize = 3;
+                break;
+            case "4": // 64K
+                codeOfBuffserSize = 4;
+                break;
+            default:
+                throw new ArgumentException(
+                    $"Value '{codeOfBufferText}' to '--buffer-size' is invalid.");
+        }
+        #endregion
         var maxBufferSize = Helper.GetBufferSize(codeOfBuffserSize);
+        Log.Verbose($"BufferSize code:{codeOfBuffserSize} -> {maxBufferSize}; 0x{maxBufferSize:x}");
 
         byte md5Code = MD5REQUIRED;
         #region --md5
@@ -78,8 +103,6 @@ static class Server
             }
         }
         #endregion
-
-        Log.Ok($"Test \"dir3\\test.txt\"=>'{ToOutputFilename("dir3\\test.txt")}'");
 
         var cancellationTokenSource = new CancellationTokenSource();
 

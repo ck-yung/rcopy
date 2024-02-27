@@ -250,16 +250,20 @@ static partial class Helper
             Read '--from-from' (short-cut '-T') from redir console input if FROM-FILE is -
             
             Syntax:
-              {nameof(rcopy2)} on HOST:PORT [--out-dir OUT-DIR] [--keep-dir FLAG] [--md5 FLAG] [--verbose FLAG]
+              {nameof(rcopy2)} on HOST:PORT [--out-dir OUT-DIR] [OPTIONS]
             
               where:
               HOST is an IPv4 or a DNS host name
               FLAG is 'on' or 'off'
             
-            Default value:
-              --keep-dir  on
-              --md5       on
-              --verbose   off
+            OPTIONS:
+              NAME          DEFAULT  ALTER
+              --keep-dir    on       off
+              --md5         on       off
+              --verbose     off      on
+              --buffer-size 2        1  3  4
+            where
+              BufferSize:  1=8K, 2=16K, 3=32K, 4=64K
             """);
         return false;
     }
