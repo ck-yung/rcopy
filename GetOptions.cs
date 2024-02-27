@@ -5,7 +5,7 @@ record FlagedArg(bool Flag, string Arg);
 static class Options
 {
     public static (string, IEnumerable<FlagedArg>) Get(string name,
-        IEnumerable<FlagedArg> args)
+        IEnumerable<FlagedArg> args, string? shortcut = null)
     {
         IEnumerable<FlagedArg> SelectFlag()
         {
@@ -13,7 +13,7 @@ static class Options
             while (itrThe.MoveNext())
             {
                 var current = itrThe.Current;
-                if (current.Arg == name)
+                if ((current.Arg == name) || (shortcut?.Equals(current.Arg) ?? false))
                 {
                     if (itrThe.MoveNext())
                     {

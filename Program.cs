@@ -1,5 +1,4 @@
 ﻿using System.Net.Sockets;
-using System.Threading;
 using static System.Console;
 
 namespace rcopy2;
@@ -29,38 +28,25 @@ public class Program
 
 	static bool RunMainAsync(string[] args)
 	{
-        if (args.Length < 2) return PrintSyntax();
+        if (args.Length < 2) return Helper.PrintSyntax();
 		var commandThe = args[0];
 		var ipThe = args[1];
-		var argRest = args.Skip(2);
-		switch (commandThe)
+        var argsRest = args.Skip(2).Select((it) => new FlagedArg(false, it));
+
+        #region --verbose
+        (var verbose, argsRest) = Options.Get("--verbose", argsRest);
+        Log.VerboseSwitch(verbose?.Equals("on") ?? false);
+        #endregion
+
+        switch (commandThe)
 		{
 			case "on":
-				return Server.Run(ipThe, argRest);
+				return Server.Run(ipThe, argsRest);
 			case "to":
-				return SendTo(ipThe, argRest);
+				return SendTo(ipThe, argsRest);
 			default:
-				return PrintSyntax();
+				return Helper.PrintSyntax();
 		}
-	}
-
-	static bool PrintSyntax()
-	{
-        // {nameof(rcopy2)} to HOST:PORT - [--raw] [--name FILE-NAME]
-        WriteLine($"""
-        Syntax:
-          {nameof(rcopy2)} to HOST:PORT FILE [FILE ..]
-          {nameof(rcopy2)} to HOST:PORT --files-from FROM-FILE [FILE ..]
-        Read '--files-from' (short-cut '-T') from redir console if FROM-FILE is -
-
-        Syntax:
-          {nameof(rcopy2)} on HOST:PORT [--out-dir OUT-DIR] [--keep-dir FLAG] [--md5 FLAG]
-
-        where
-          HOST is an IP or a DNS host name
-          FLAG is 'on' or 'off'
-        """);
-		return false;
 	}
 
 	record FilesFrom(StreamReader Input, Action<StreamReader> CloseAction)
@@ -81,15 +67,17 @@ public class Program
         }
     }
 
-    static bool SendTo(string ipTarget, IEnumerable<string> args)
+    static bool SendTo(string ipTarget, IEnumerable<FlagedArg> argsRest)
 	{
 		FilesFrom OpenFilesFrom(string path)
 		{
+			if (string.IsNullOrEmpty(path)) return FilesFrom.Null;
+			Log.Ok($"Files-from is '{path}'");
 			if (path == "-")
 			{
 				if (false == Console.IsInputRedirected)
 				{
-                    PrintSyntax();
+                    Helper.PrintSyntax();
 					return FilesFrom.Null;
                 }
                 return new FilesFrom(new StreamReader(OpenStandardInput()), (_) => { });
@@ -103,32 +91,15 @@ public class Program
 			return new FilesFrom(File.OpenText(path), (it) => it.Close());
 		}
 
-		var filesFrom = FilesFrom.Null;
-        IEnumerable<string> paths = args;
+        (var pathFilesFrom, argsRest) = Options.Get("--files-from", argsRest, shortcut:"-T");
+		var filesFrom = OpenFilesFrom(pathFilesFrom);
 
-		var check2 = args.Take(2).ToArray();
-        if ((check2.Length > 0) &&
-			((check2[0] == "--files-from") || check2[0] == "-T"))
-		{
-			if (check2.Length < 2)
-			{
-				WriteLine("Missing filename to --file-from!");
-				return false;
-			}
+		IEnumerable<string> paths = argsRest.Select((it) => it.Arg);
 
-			filesFrom = OpenFilesFrom(check2[1]);
-			if (filesFrom.Input == StreamReader.Null)
-			{
-				return false;
-			}
-
-			paths = filesFrom.GetPathsFrom()
-				.Select((it) => it.Trim())
-				.Where((it) => it.Length > 0)
-				.Union(args.Skip(2));
-		}
-
-		IEnumerable<Info> infos = paths
+		IEnumerable<Info> infos = filesFrom.GetPathsFrom()
+			.Select((it) => it.Trim())
+            .Where((it) => it.Length > 0)
+            .Union(argsRest.Select((it) => it.Arg))
 			.Distinct()
 			.Select((it) => new Info(it, new FileInfo(it)))
 			.Where((it) => it.File.Exists);

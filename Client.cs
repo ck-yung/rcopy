@@ -62,13 +62,10 @@ static class Client
         long sentSizeThe = 0;
         int wantSize = 0;
         byte bufferCode;
-        int sentCounter; // TODO: remove debug
         int maxBufferSize;
 
         async Task<int> SendAndGetResponse(int sizeToBeSent)
         {
-            sentCounter += 1;
-            Log.Debug($"[sentCounter:{sentCounter}] SendAndGetResponse(sizeToBeSent:{sizeToBeSent})");
             if (sizeToBeSent == maxBufferSize)
             {
                 if (false == await byte01.As(bufferCode).Send(socketThe, cancellationTokenSource.Token))
@@ -108,7 +105,6 @@ static class Client
             {
                 Log.Error($"RSP to SendAndGetResponse: (status:{statusTxfr}; RSP:{rsp16} but want:{sentSizeThe})");
             }
-            Log.Debug($"[sentCounter:{sentCounter}] SendAndGetResponse(sizeToBeSent:{sizeToBeSent}) reply {cntTxfr}");
             return cntTxfr;
         }
 
@@ -122,7 +118,7 @@ static class Client
         try
         {
             await serverThe.ConnectAsync(endPointThe, connectTimeout.Token);
-            Log.Ok("Connected");
+            Log.Verbose("Connected");
             socketThe = serverThe.Client;
 
             (statusTxfr, bufferCode, var md5Code) = await byte02.ReceiveBytes(socketThe,
@@ -146,11 +142,12 @@ static class Client
 
             foreach (var info in infos)
             {
+                Log.Verbose(info.Name);
+
                 if (0 == await SendFileInfo(socketThe, info))
                 {
                     break;
                 }
-                Log.Debug($"Send info '{info.Name}' ok");
 
                 Task<int> readTask;
                 Task<int> sendTask;
@@ -158,9 +155,7 @@ static class Client
                 try
                 {
                     var md5 = Md5Factory.Make(md5Code == Helper.MD5REQUIRED);
-                    sentCounter = -1;
                     using var inpFile = File.OpenRead(info.Name);
-                    //Log.Ok($"{info.Name} size {info.File.Length}b");
 
                     int readRealSize = 0;
 
@@ -206,11 +201,6 @@ static class Client
                         Log.Error($"Fail to send end block size code!");
                         break;
                     }
-                    //if (false == await byte02.As(0).Send(socketThe, cancellationTokenSource.Token))
-                    //{
-                    //    Log.Error($"Fail to send end data-size!");
-                    //    break;
-                    //}
 
                     #region MD5
                     var hash = md5.Get();

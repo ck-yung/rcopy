@@ -6,10 +6,8 @@ namespace rcopy2;
 
 static class Server
 {
-    public static bool Run(string ipServer, IEnumerable<string> args)
+    public static bool Run(string ipServer, IEnumerable<FlagedArg> argsRest)
     {
-        var argsRest = args.Select((it) => new FlagedArg(false, it));
-
         #region --keep-dir
         (var keepDir, argsRest) = Options.Get("--keep-dir", argsRest);
 
@@ -213,7 +211,7 @@ static class Server
                                 cancellationTokenSource.Token);
                             if (codeOfBuffserSize != codeRecv)
                             {
-                                Log.Ok($"#{idCnn} reply different CtrlCode x{tmp02:x4} from system x{codeOfBuffserSize:x4}");
+                                Log.Error($"#{idCnn} reply different CtrlCode x{tmp02:x4} from system x{codeOfBuffserSize:x4}");
                                 return;
                             }
 
@@ -231,15 +229,7 @@ static class Server
                                 {
                                     break;
                                 }
-                                var fileTime = DateTimeOffset.Now;
-                                try
-                                {
-                                    fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp16);
-                                }
-                                catch (Exception eeDt)
-                                {
-                                    Log.Error($"FromUnixTimeSeconds({tmp16}) failed! {eeDt}");
-                                }
+                                var fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp16);
 
                                 (statusTxfr, tmp16) = await byte16.Receive(socketThe,
                                     cancellationTokenSource.Token);
@@ -263,12 +253,12 @@ static class Server
                                     sizeWant, cancellationTokenSource.Token);
                                 if (cntTxfr != sizeWant)
                                 {
-                                    Log.Ok($"Read file-name failed! (want:{sizeWant} but real:{cntTxfr})");
+                                    Log.Error($"Read file-name failed! (want:{sizeWant} but real:{cntTxfr})");
                                     break;
                                 }
                                 var fileName = Encoding.UTF8.GetString(recvBytes, 0, cntTxfr);
                                 Log.Debug($"#{idCnn} > {fileSizeWant,10} {fileTime:s} '{fileName}'");
-                                Log.Ok($"#{idCnn} > {fileName}");
+                                Log.Verbose($"#{idCnn} > {fileName}");
 
                                 if (false == await byte16.As(0).Send(socketThe,
                                     cancellationTokenSource.Token))

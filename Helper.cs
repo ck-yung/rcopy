@@ -186,6 +186,9 @@ static class Log
     public static Action<string> Debug { get; internal set; }
         = (_) => { };
 
+    public static Action<string> Verbose { get; internal set; }
+    = (_) => { };
+
     public static void Init()
     {
         if (System.Diagnostics.Debugger.IsAttached)
@@ -202,6 +205,15 @@ static class Log
                 Debug = (message) =>
                 Console.Error.WriteLine($"dbg: {TimeText()} {message}");
             }
+        }
+    }
+
+    public static void VerboseSwitch(bool flag)
+    {
+        if (flag)
+        {
+            Verbose = (message) =>
+            Console.WriteLine($"{TimeText()} {message}");
         }
     }
 }
@@ -227,6 +239,29 @@ static partial class Helper
                     $"Invalid CodeOfBuffer:{code} is found!");
 
         }
+    }
+
+    static public bool PrintSyntax()
+    {
+        Console.WriteLine("""
+            Syntax:
+              {nameof(rcopy2)} to HOST:PORT FILE [FILE ..]
+              {nameof(rcopy2)} to HOST:PORT --files-from FROM-FILE [FILE ..]
+            Read '--from-from' (short-cut '-T') from redir console input if FROM-FILE is -
+            
+            Syntax:
+              {nameof(rcopy2)} on HOST:PORT [--out-dir OUT-DIR] [--keep-dir FLAG] [--md5 FLAG] [--verbose FLAG]
+            
+              where:
+              HOST is an IPv4 or a DNS host name
+              FLAG is 'on' or 'off'
+            
+            Default value:
+              --keep-dir  on
+              --md5       on
+              --verbose   off
+            """);
+        return false;
     }
 
     public const byte MD5REQUIRED = 0x10;
