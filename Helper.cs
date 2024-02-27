@@ -8,6 +8,38 @@ namespace rcopy2;
 
 record Info(string Name, FileInfo File);
 
+sealed class Byte1
+{
+    public const int Length = 1;
+    public readonly byte[] Data = new byte[1];
+
+    public Byte1 As(byte value)
+    {
+        Data[0] = value;
+        return this;
+    }
+
+    public byte Value()
+    {
+        return Data[0];
+    }
+
+    public async Task<(bool Status, byte Result)> Receive(
+        Socket socket, CancellationToken cancellation)
+    {
+        int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
+        if (cntTxfr != Length) return (false, 0);
+        return (true, Value());
+    }
+
+    public async Task<bool> Send(Socket socket, CancellationToken cancellation)
+    {
+        int cntTxfr = await Helper.Send(socket, Data, Length, cancellation);
+        if (cntTxfr != Length) return false;
+        return true;
+    }
+}
+
 sealed class Byte2
 {
     public const int Length = 2;
@@ -30,6 +62,11 @@ sealed class Byte2
         return As((UInt16)value);
     }
 
+    public Byte2 As(byte low, byte high)
+    {
+        return As(high * 256 + low);
+    }
+
     public UInt16 Value()
     {
         UInt16 rtn = Data[1];
@@ -44,6 +81,14 @@ sealed class Byte2
         int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
         if (cntTxfr != Length) return (false, 0);
         return (true, Value());
+    }
+
+    public async Task<(bool Status, byte low, byte hight)> ReceiveBytes(
+        Socket socket, CancellationToken cancellation)
+    {
+        int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
+        if (cntTxfr != Length) return (false, 0, 0);
+        return (true, Data[0], Data[1]);
     }
 
     public async Task<bool> Send(Socket socket, CancellationToken cancellation)
@@ -151,19 +196,41 @@ static class Log
         }
         else
         {
-            Debug = (message) =>
-            Console.Error.WriteLine($"dbg: {TimeText()} {message}");
+            var tmp2 = Environment.GetEnvironmentVariable(nameof(rcopy2));
+            if (tmp2?.Contains("debug:on") ?? false)
+            {
+                Debug = (message) =>
+                Console.Error.WriteLine($"dbg: {TimeText()} {message}");
+            }
         }
     }
 }
 
 static partial class Helper
 {
-    public const UInt16 CodeOfBuffer = 2;
-    public const UInt16 Md5Required = 0x0100;
-    public const UInt16 Md5Skipped =  0x0200;
+    public const byte DefaultCodeOfBufferSize = 2;  // 16K
 
-    public const int InitBufferSize = 16 * 1024;
+    public static int GetBufferSize(byte code)
+    {
+        switch (code)
+        {
+            case 1:
+                return 0x2000; // 8K
+            case 2:
+                return 0x4000; // 16K
+            case 3:
+                return 0x8000; // 32K
+            case 4:
+                return 0x10000; // 64K
+            default:
+                throw new ArgumentOutOfRangeException(
+                    $"Invalid CodeOfBuffer:{code} is found!");
+
+        }
+    }
+
+    public const byte MD5REQUIRED = 0x10;
+    public const byte MD5SKIPPED =  0x11;
 
     [GeneratedRegex(
     @"^(?<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(?<port>\d{1,5})$")]
@@ -302,6 +369,7 @@ internal interface IMD5
     string GetName();
     void AddData(byte[] data, int length);
     byte[] Get();
+    bool CheckWith(byte[] otherMd5, int length);
 }
 
 internal static class Md5Factory
@@ -330,6 +398,25 @@ internal static class Md5Factory
             return Md5.GetCurrentHash();
         }
         public string GetName() => "Real";
+
+        public bool CheckWith(byte[] otherMd5, int length)
+        {
+            Log.Debug($"MD5 CheckWith (otherLength:{length}) is called");
+            var md5The = Get();
+            if (true != otherMd5.Compare(md5The, length))
+            {
+                var md5TheText = BitConverter.ToString(
+                    md5The, startIndex: 0, length: md5The.Length)
+                    .Replace("-", "").ToLower();
+                var md5OtherText = BitConverter.ToString(
+                    otherMd5, startIndex: 0, length: length)
+                    .Replace("-", "").ToLower();
+                Log.Debug($"MyMD5 is {md5TheText} but other is {md5OtherText}");
+                return false;
+            }
+
+            return true;
+        }
     }
 
     class Md5Fake : IMD5
@@ -337,6 +424,11 @@ internal static class Md5Factory
         public void AddData(byte[] data, int length) { }
         public byte[] Get() => Array.Empty<byte>();
         public string GetName() => "Fake";
+        public bool CheckWith(byte[] otherMd5, int length)
+        {
+            Log.Debug($"MD5.Null CheckWith(otherLenth:{length}) is called");
+            return true;
+        }
     }
 
     static Md5Fake Null = new();
