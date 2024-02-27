@@ -269,7 +269,7 @@ static partial class Helper
     }
 
     public static async Task<int> Read(FileStream stream,
-        byte[] data, int wantSize, CancellationToken token)
+        byte[] data, int wantSize, IMD5 md5, CancellationToken token)
     {
         int rtn = 0;
         int offset = 0;
@@ -283,6 +283,7 @@ static partial class Helper
             offset += cntTxfr;
             wantSize2 -= cntTxfr;
         }
+        if (rtn > 0) md5.AddData(data, rtn);
         return rtn;
     }
 }

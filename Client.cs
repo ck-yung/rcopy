@@ -196,7 +196,7 @@ static class Client
                     {
                         wantSize = (int)(info.File.Length);
                     }
-                    readTask = Helper.Read(inpFile, buffer.ReadBuffer(), wantSize,
+                    readTask = Helper.Read(inpFile, buffer.ReadBuffer(), wantSize, md5,
                             cancellationTokenSource.Token);
 
                     while (sentSizeThe < info.File.Length)
@@ -209,8 +209,6 @@ static class Client
                         }
                         Log.Debug($"{info.Name} read {readRealSize}b and send.RSP:{sendTask.Result})");
 
-                        md5.AddData(buffer.ReadBuffer(), readRealSize);
-
                         buffer.Switch();
 
                         sendTask = SendAndGetResponse(readRealSize);
@@ -222,7 +220,7 @@ static class Client
                         }
                         if (1 > wantSize) break;
 
-                        readTask = Helper.Read(inpFile, buffer.ReadBuffer(), wantSize,
+                        readTask = Helper.Read(inpFile, buffer.ReadBuffer(), wantSize, md5,
                             cancellationTokenSource.Token);
 
                         // **** sendTask.Wait();
