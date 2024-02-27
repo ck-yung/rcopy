@@ -3,36 +3,6 @@ using System.Text;
 using static rcopy2.Helper;
 namespace rcopy2;
 
-internal class Buffer
-{
-    bool flag;
-    byte[] bufferA;
-    byte[] bufferB;
-
-    public Buffer(int size)
-    {
-        flag = false;
-        bufferA = new byte[size];
-        bufferB = new byte[size];
-    }
-
-    public byte[] ReadBuffer()
-    {
-        return flag ? bufferA : bufferB;
-    }
-
-    public byte[] SendBuffer()
-    {
-        return flag ? bufferB : bufferA;
-    }
-
-    public bool Switch()
-    {
-        flag = !flag;
-        return flag;
-    }
-}
-
 static class Client
 {
     public static async Task<int> Run(string ipServer, IEnumerable<Info> infos)
@@ -119,7 +89,7 @@ static class Client
                 Log.Debug($"Send last buffer size {sizeToBeSent} ok");
             }
 
-            var sendTask = Helper.Send(socketThe, buffer.SendBuffer(), sizeToBeSent,
+            var sendTask = Helper.Send(socketThe, buffer.OutputData(), sizeToBeSent,
                 cancellationTokenSource.Token);
             sendTask.Wait();
             int cntTxfr = sendTask.Result;
@@ -188,7 +158,7 @@ static class Client
 
                     int readRealSize = 0;
 
-                    sendTask = Helper.Send(socketThe, buffer.SendBuffer(),
+                    sendTask = Helper.Send(socketThe, buffer.OutputData(),
                         wantSize:0, token:cancellationTokenSource.Token);
 
                     wantSize = InitBufferSize;
@@ -196,7 +166,7 @@ static class Client
                     {
                         wantSize = (int)(info.File.Length);
                     }
-                    readTask = Helper.Read(inpFile, buffer.ReadBuffer(), wantSize, md5,
+                    readTask = Helper.Read(inpFile, buffer.InputData(), wantSize, md5,
                             cancellationTokenSource.Token);
 
                     while (sentSizeThe < info.File.Length)
@@ -220,7 +190,7 @@ static class Client
                         }
                         if (1 > wantSize) break;
 
-                        readTask = Helper.Read(inpFile, buffer.ReadBuffer(), wantSize, md5,
+                        readTask = Helper.Read(inpFile, buffer.InputData(), wantSize, md5,
                             cancellationTokenSource.Token);
 
                         // **** sendTask.Wait();

@@ -283,8 +283,17 @@ static partial class Helper
             offset += cntTxfr;
             wantSize2 -= cntTxfr;
         }
-        if (rtn > 0) md5.AddData(data, rtn);
+        md5.AddData(data, rtn);
         return rtn;
+    }
+
+    public static async Task<int> Write(FileStream stream,
+        byte[] data, int wantSize, IMD5 md5, CancellationToken token)
+    {
+        if (wantSize < 1) return 0;
+        md5.AddData(data, wantSize);
+        await stream.WriteAsync(data, 0, wantSize, token);
+        return wantSize;
     }
 }
 
@@ -311,7 +320,10 @@ internal static class Md5Factory
             {
                 Log.Debug($"Md5Real.AddData(length:{length})");
             }
-            Md5.AppendData(data, 0, length);
+            if (length > 8)
+            {
+                Md5.AppendData(data, 0, length);
+            }
         }
         public byte[] Get()
         {
@@ -333,5 +345,35 @@ internal static class Md5Factory
     {
         if (flag) return new Md5Real();
         return Null;
+    }
+}
+
+internal class Buffer
+{
+    bool flag;
+    byte[] bufferA;
+    byte[] bufferB;
+
+    public Buffer(int size)
+    {
+        flag = false;
+        bufferA = new byte[size];
+        bufferB = new byte[size];
+    }
+
+    public byte[] InputData()
+    {
+        return flag ? bufferA : bufferB;
+    }
+
+    public byte[] OutputData()
+    {
+        return flag ? bufferB : bufferA;
+    }
+
+    public bool Switch()
+    {
+        flag = !flag;
+        return flag;
     }
 }
