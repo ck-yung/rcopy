@@ -104,6 +104,22 @@ static class Server
         }
         #endregion
 
+        Func<string, string, bool> ipAllow;
+        #region --allow
+        (var ipMask, argsRest) = Options.Get("--allow", argsRest);
+        if (string.IsNullOrEmpty(ipMask))
+        {
+            ipAllow = (_, _) => true;
+        }
+        else
+        {
+            var tmpIpAllow = MakeIpMask(ipMask);
+            if (tmpIpAllow == null)
+                throw new ArgumentException($"'{ipMask}' is invalid to '--allow'");
+            ipAllow = tmpIpAllow;
+        }
+        #endregion
+
         var cancellationTokenSource = new CancellationTokenSource();
 
         var endPointThe = ParseIpEndpoint(ipServer);
@@ -143,6 +159,11 @@ static class Server
                         }
 
                         var remoteEndPoint = socketThe.RemoteEndPoint;
+                        if (ipAllow(socketThe.LocalEndPoint?.ToString() ?? "?1",
+                            remoteEndPoint?.ToString() ?? "?2"))
+                        {
+                            Log.Ok($"#{idCnn} '{remoteEndPoint}' is rejected to '{socketThe.LocalEndPoint}'");
+                        }
                         Log.Ok($"#{idCnn} '{remoteEndPoint}' connected");
 
                         int cntFille = 0;

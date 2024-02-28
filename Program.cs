@@ -28,7 +28,13 @@ public class Program
 
 	static bool RunMainAsync(string[] args)
 	{
+		if (args.Any((it) => "--help" == it))
+		{
+            return Helper.PrintSyntax(isDetailed:true);
+        }
+
         if (args.Length < 2) return Helper.PrintSyntax();
+
 		var commandThe = args[0];
 		var ipThe = args[1];
         var argsRest = args.Skip(2).Select((it) => new FlagedArg(false, it));

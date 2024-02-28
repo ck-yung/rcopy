@@ -241,9 +241,9 @@ static partial class Helper
         }
     }
 
-    static public bool PrintSyntax()
+    static public bool PrintSyntax(bool isDetailed = false)
     {
-        Console.WriteLine("""
+        Console.WriteLine($"""
             Syntax:
               {nameof(rcopy2)} to HOST:PORT FILE [FILE ..]
               {nameof(rcopy2)} to HOST:PORT --files-from FROM-FILE [FILE ..]
@@ -251,10 +251,20 @@ static partial class Helper
             
             Syntax:
               {nameof(rcopy2)} on HOST:PORT [--out-dir OUT-DIR] [OPTIONS]
-            
+            """);
+        if (false == isDetailed)
+        {
+            Console.WriteLine($"""
+
+                Syntax:
+                  {nameof(rcopy2)} --help
+                """);
+            return false;
+        }
+        Console.WriteLine("""
+
               where:
-              HOST is an IPv4 or a DNS host name
-              FLAG is 'on' or 'off'
+              HOST is 'localhost', an IPv4, or, a DNS host name
             
             OPTIONS:
               NAME          DEFAULT  ALTER
@@ -262,6 +272,7 @@ static partial class Helper
               --md5         on       off
               --verbose     off      on
               --buffer-size 2        1  3  4
+              --allow       all      localhost | 192.168.*.* | 192.=.=.* | 192.168.0.2
             where
               BufferSize:  1=8K, 2=16K, 3=32K, 4=64K
             """);
@@ -313,18 +324,6 @@ static partial class Helper
         throw new ArgumentException($"'{arg}' is NOT in valid IP:PORT format");
     }
 
-    public static string ToHexDigit(this byte[] bytes)
-    {
-        var length = int.Min(bytes.Length, 8);
-        var rtn = new StringBuilder();
-        rtn.Append($"{bytes[0]:x2}");
-        for ( int ii = 1; ii < length; ii+=1)
-        {
-            rtn.Append($".{bytes[ii]:x2}");
-        }
-        return rtn.ToString();
-    }
-
     public static async Task<int> Recv(Socket socket,
         byte[] data, int wantSize, CancellationToken token)
     {
@@ -365,10 +364,9 @@ static partial class Helper
         return rtn;
     }
 
-    public static bool Compare(this byte[] the, byte[] other, int length = 0)
+    public static bool Compare(this byte[] the, byte[] other, int length = -1)
     {
-        if (length == 0) length = the.Length;
-        if (length > other.Length) return false;
+        if (length < 0) length = the.Length;
         for (int ii = 0; ii < length; ii++)
             if (the[ii] != other[ii]) return false;
         return true;
@@ -400,6 +398,85 @@ static partial class Helper
         md5.AddData(data, wantSize);
         await stream.WriteAsync(data, 0, wantSize, token);
         return wantSize;
+    }
+
+    const string ipV4Local = "127.0.0.1";
+    const string ipV6Local = "::1";
+    const string localHost = "localhost";
+
+    /// <summary>
+    /// Make a comparer of two IP whose formats are
+    ///  "999.999.999.999" or "999.999.999:8888"
+    /// </summary>
+    /// <param name="mask">e.g. "=.=.=.*", "1.2.3,*", "localhost", "all"</param>
+    /// <remarks>
+    ///  MASK     | Arg1      Arg2      | Compare
+    ///  ----     | ----      ----      | -------
+    ///  all      | any       any       | true
+    ///
+    ///  localhost| any       127.0.0.1 | true
+    ///           | any       ::1       | true
+    ///           | any       other     | false
+    ///
+    ///  =.=.=.*  | 1.2.3.4   1.2.3.5   | true
+    ///           | 1.2.3.4   1.2.6.7   | false
+    ///
+    ///  =.=.*.*  | 1.2.3.4   1.2.5.6   | true
+    ///           | 1.2.3.4   1.5.6.7   | false
+    ///
+    ///  1.2.3.*  | any       1.2.3.4   | true
+    ///           | any       1.5.3.6   | false
+    /// </remarks>
+    /// <returns>Compare(LocalIp, RemoteIp), or,
+    /// null if param "mask" is in wrong format</returns>
+    public static Func<string, string, bool>?
+        MakeIpMask(string mask)
+    {
+        if ("all" == mask) return (_, _) => true;
+
+        if ("localhost" == mask) return (_, arg)
+                => "127.0.0.1" == arg || "::1" == arg;
+
+        Func<string, Func<string, string, bool>> txtToFunc = (arg) =>
+        {
+            switch(arg)
+            {
+                case "=": return (a2, b2) => a2 == b2;
+                case "*": return (_, _) => true;
+                default: return (_, c2) => arg == c2;
+            }
+        };
+
+        var mm = mask
+            .Split('.', count: 5)
+            .Select((it) => txtToFunc(it))
+            .ToArray();
+
+        if (mm.Length != 4) return null;
+
+        return (ipLocal, ipRemote) =>
+        {
+            Log.Debug($"IpMask(local='{ipLocal}',remote='{ipRemote}')");
+            if ("::1" == ipLocal) ipLocal = "127.0.0.1";
+            var aa = (ipLocal
+            .Split(':', count: 2)
+            .FirstOrDefault() ?? string.Empty)
+            .Split('.', count: 5)
+            .ToArray();
+
+            var bb = (ipRemote
+            .Split(':', count: 2)
+            .FirstOrDefault() ?? string.Empty)
+            .Split('.', count: 5)
+            .ToArray();
+
+            if (aa.Length != 4 || bb.Length != 4) return false;
+
+            return aa
+            .Zip(bb)
+            .Zip(mm)
+            .All((it) => it.Second(it.First.First, it.First.Second));
+        };
     }
 }
 
