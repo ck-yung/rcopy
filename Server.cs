@@ -159,10 +159,14 @@ static class Server
                         }
 
                         var remoteEndPoint = socketThe.RemoteEndPoint;
-                        if (ipAllow(socketThe.LocalEndPoint?.ToString() ?? "?1",
+                        if (false == ipAllow(socketThe.LocalEndPoint?.ToString() ?? "?1",
                             remoteEndPoint?.ToString() ?? "?2"))
                         {
-                            Log.Ok($"#{idCnn} '{remoteEndPoint}' is rejected to '{socketThe.LocalEndPoint}'");
+                            Log.Ok($"#{idCnn} '{remoteEndPoint}' is rejected to local:'{socketThe.LocalEndPoint}'");
+                            socketThe.Shutdown(SocketShutdown.Both);
+                            await Task.Delay(20);
+                            socketThe.Close();
+                            return;
                         }
                         Log.Ok($"#{idCnn} '{remoteEndPoint}' connected");
 
@@ -367,7 +371,7 @@ static class Server
                                 #region MD5
                                 if (md5CodeRecv == MD5REQUIRED)
                                 {
-                                    Log.Debug("Wait MD5 ..");
+                                    //Log.Debug("Wait MD5 ..");
                                     (statusTxfr, tmp02) = await byte02.Receive(socketThe,
                                         cancellationTokenSource.Token);
                                     Log.Debug($"MD5-size recv (status:{statusTxfr}; length:{tmp02})");
@@ -382,7 +386,7 @@ static class Server
                                     }
                                     cntTxfr = await Helper.Recv(socketThe, recvBytes, tmp02,
                                         cancellationTokenSource.Token);
-                                    Log.Debug($"MD5 recv (status:{statusTxfr}; realLength:{tmp02})");
+                                    //Log.Debug($"MD5 recv (status:{statusTxfr}; realLength:{tmp02})");
                                     if (true!=md5.CheckWith(recvBytes, cntTxfr))
                                     {
                                         Log.Error($"MD5 is mis-matched!");

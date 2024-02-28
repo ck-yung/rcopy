@@ -435,7 +435,7 @@ static partial class Helper
         if ("all" == mask) return (_, _) => true;
 
         if ("localhost" == mask) return (_, arg)
-                => "127.0.0.1" == arg || "::1" == arg;
+                => arg.StartsWith("127.0.0.1:") || arg.StartsWith("[::1]:");
 
         Func<string, Func<string, string, bool>> txtToFunc = (arg) =>
         {
@@ -457,7 +457,8 @@ static partial class Helper
         return (ipLocal, ipRemote) =>
         {
             Log.Debug($"IpMask(local='{ipLocal}',remote='{ipRemote}')");
-            if ("::1" == ipLocal) ipLocal = "127.0.0.1";
+            if (ipLocal.StartsWith("[::1]:")) ipLocal = "127.0.0.1:1";
+            if (ipRemote.StartsWith("[::1]:")) ipLocal = "127.0.0.1:2";
             var aa = (ipLocal
             .Split(':', count: 2)
             .FirstOrDefault() ?? string.Empty)
@@ -494,21 +495,23 @@ internal static class Md5Factory
     {
         readonly IncrementalHash Md5 = IncrementalHash
             .CreateHash(HashAlgorithmName.MD5);
+
         public void AddData(byte[] data, int length)
         {
-            if (length > 4)
+            if (length > 0)
             {
-                Log.Debug($"Md5Real.AddData(length:{length}) {data[0]:X2}.{data[1]}:X2.{data[2]:X2}.{data[3]:X2}");
-            }
-            else
-            {
-                Log.Debug($"Md5Real.AddData(length:{length})");
-            }
-            if (length > 8)
-            {
+                if (length > 4)
+                {
+                    Log.Debug($"Md5Real.AddData(length:{length}) {data[0]:X2}.{data[1]}:X2.{data[2]:X2}.{data[3]:X2}");
+                }
+                else
+                {
+                    Log.Debug($"Md5Real.AddData(length:{length})");
+                }
                 Md5.AppendData(data, 0, length);
             }
         }
+
         public byte[] Get()
         {
             return Md5.GetCurrentHash();

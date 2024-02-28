@@ -109,7 +109,7 @@ static class Client
         }
 
         int cntFile = 0;
-        long sumSize = 0;
+        //long sumSize = 0;
         long sumSent = 0;
         var endPointThe = ParseIpEndpoint(ipServer);
         var connectTimeout = new CancellationTokenSource(millisecondsDelay: 3000);
@@ -163,14 +163,14 @@ static class Client
                         wantSize:0, token:cancellationTokenSource.Token);
 
                     wantSize = maxBufferSize;
-                    if (wantSize > info.File.Length)
-                    {
-                        wantSize = (int)(info.File.Length);
-                    }
+                    //if (wantSize > info.File.Length)
+                    //{
+                    //    wantSize = (int)(info.File.Length);
+                    //}
                     readTask = Helper.Read(inpFile, buffer.InputData(), wantSize, md5,
                             cancellationTokenSource.Token);
 
-                    while (sentSizeThe < info.File.Length)
+                    while (true) // (sentSizeThe < info.File.Length)
                     {
                         Task.WaitAll(sendTask, readTask);
                         readRealSize = readTask.Result;
@@ -186,11 +186,11 @@ static class Client
                         sendTask = SendAndGetResponse(readRealSize);
 
                         wantSize = maxBufferSize;
-                        if ((sentSizeThe + wantSize) > info.File.Length)
-                        {
-                            wantSize = (int)(info.File.Length - sentSizeThe);
-                        }
-                        if (1 > wantSize) break;
+                        //if ((sentSizeThe + wantSize) > info.File.Length)
+                        //{
+                        //    wantSize = (int)(info.File.Length - sentSizeThe);
+                        //}
+                        //if (1 > wantSize) break;
 
                         readTask = Helper.Read(inpFile, buffer.InputData(), wantSize, md5,
                             cancellationTokenSource.Token);
@@ -227,14 +227,14 @@ static class Client
                 }
 
                 cntFile += 1;
-                sumSize += info.File.Length;
+                //sumSize += info.File.Length;
                 sumSent += sentSizeThe;
             }
             Log.Debug($"sentCntFile:{cntFile}");
             serverThe.Client.Shutdown(SocketShutdown.Both);
             Task.Delay(20).Wait();
             serverThe.Client.Close();
-            Log.Ok($"Connection is closed (cntFile={cntFile}; sumSize={sumSize})");
+            Log.Ok($"Connection is closed (cntFile={cntFile}; sumSent={sumSent})");
             Task.Delay(20).Wait();
         }
         catch (SocketException se)

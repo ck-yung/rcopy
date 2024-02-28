@@ -78,7 +78,7 @@ public class Program
 		FilesFrom OpenFilesFrom(string path)
 		{
 			if (string.IsNullOrEmpty(path)) return FilesFrom.Null;
-			Log.Ok($"Files-from is '{path}'");
+			Log.Verbose($"Files-from is '{path}'");
 			if (path == "-")
 			{
 				if (false == Console.IsInputRedirected)
@@ -100,12 +100,13 @@ public class Program
         (var pathFilesFrom, argsRest) = Options.Get("--files-from", argsRest, shortcut:"-T");
 		var filesFrom = OpenFilesFrom(pathFilesFrom);
 
-		IEnumerable<string> paths = argsRest.Select((it) => it.Arg);
+		var paths = argsRest.Select((it) => it.Arg).ToArray();
+		Log.Verbose($"paths={string.Join(';',paths)}");
 
 		IEnumerable<Info> infos = filesFrom.GetPathsFrom()
 			.Select((it) => it.Trim())
             .Where((it) => it.Length > 0)
-            .Union(argsRest.Select((it) => it.Arg))
+            .Union(paths)
 			.Distinct()
 			.Select((it) => new Info(it, new FileInfo(it)))
 			.Where((it) => it.File.Exists);
