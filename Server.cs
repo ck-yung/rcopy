@@ -1,5 +1,6 @@
 ﻿using System.Collections.Immutable;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using static rcopy2.Helper;
 
@@ -289,7 +290,6 @@ static class Server
                                     break;
                                 }
                                 Log.Debug($"Recv fileTime: 0x{fileTime:x}");
-                                //var fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp16);
 
                                 (statusTxfr, tmp16) = await byte16.Receive(socketThe,
                                     cancellationTokenSource.Token);
@@ -434,6 +434,11 @@ static class Server
                                                     Log.Debug($"FileTime'{theTime:s}';0x{fileTime:x} -> '{outputRealFilename}'");
                                                     File.SetLastWriteTime(path: outputRealFilename,
                                                         lastWriteTime: theTime.DateTime);
+                                                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                                                    || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                                                    {
+                                                        File.SetCreationTime(path: outputRealFilename, creationTime: DateTime.Now);
+                                                    }
                                                 }
                                                 else Log.Verbose($"Skip ZERO-fileTime '{outputRealFilename}'");
                                             }
