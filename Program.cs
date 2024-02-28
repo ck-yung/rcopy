@@ -101,11 +101,10 @@ public class Program
 		var filesFrom = OpenFilesFrom(pathFilesFrom);
 
 		var paths = argsRest.Select((it) => it.Arg).ToArray();
-		Log.Verbose($"paths={string.Join(';',paths)}");
+		//Log.Verbose($"paths={string.Join(';',paths)}");
 
 		IEnumerable<Info> infos = filesFrom.GetPathsFrom()
 			.Select((it) => it.Trim())
-            .Where((it) => it.Length > 0)
             .Union(paths)
 			.Distinct()
 			.Select((it) => new Info(it, new FileInfo(it)))

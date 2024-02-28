@@ -19,6 +19,7 @@ static class Client
             var byte16 = new Byte16();
 
             long tmp2 = new DateTimeOffset(info.File.LastWriteTimeUtc).ToUnixTimeSeconds();
+            Log.Debug($"Send fileTime: 0x{tmp2:x}");
             if (false == await byte16.As(tmp2).Send(socket, cancellationTokenSource.Token))
             {
                 Log.Error($"Fail to send date-time");
@@ -109,7 +110,6 @@ static class Client
         }
 
         int cntFile = 0;
-        //long sumSize = 0;
         long sumSent = 0;
         var endPointThe = ParseIpEndpoint(ipServer);
         var connectTimeout = new CancellationTokenSource(millisecondsDelay: 3000);
@@ -142,7 +142,7 @@ static class Client
 
             foreach (var info in infos)
             {
-                Log.Verbose(info.Name);
+                Log.Verbose($"File> {info.Name}");
 
                 if (0 == await SendFileInfo(socketThe, info))
                 {
@@ -163,14 +163,10 @@ static class Client
                         wantSize:0, token:cancellationTokenSource.Token);
 
                     wantSize = maxBufferSize;
-                    //if (wantSize > info.File.Length)
-                    //{
-                    //    wantSize = (int)(info.File.Length);
-                    //}
                     readTask = Helper.Read(inpFile, buffer.InputData(), wantSize, md5,
                             cancellationTokenSource.Token);
 
-                    while (true) // (sentSizeThe < info.File.Length)
+                    while (true)
                     {
                         Task.WaitAll(sendTask, readTask);
                         readRealSize = readTask.Result;
@@ -186,11 +182,6 @@ static class Client
                         sendTask = SendAndGetResponse(readRealSize);
 
                         wantSize = maxBufferSize;
-                        //if ((sentSizeThe + wantSize) > info.File.Length)
-                        //{
-                        //    wantSize = (int)(info.File.Length - sentSizeThe);
-                        //}
-                        //if (1 > wantSize) break;
 
                         readTask = Helper.Read(inpFile, buffer.InputData(), wantSize, md5,
                             cancellationTokenSource.Token);
@@ -227,7 +218,6 @@ static class Client
                 }
 
                 cntFile += 1;
-                //sumSize += info.File.Length;
                 sumSent += sentSizeThe;
             }
             Log.Debug($"sentCntFile:{cntFile}");

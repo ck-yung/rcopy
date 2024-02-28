@@ -268,16 +268,18 @@ static class Server
                                 Log.Ok($"#{idCnn} reply different MD5-Flag");
                             }
 
-                            long fileSizeWant = 0;
+                            long fileSizeWant;
+                            long fileTime;
                             while (true)
                             {
-                                (statusTxfr, tmp16) = await byte16.Receive(socketThe,
+                                (statusTxfr, fileTime) = await byte16.Receive(socketThe,
                                     cancellationTokenSource.Token);
                                 if (false == statusTxfr)
                                 {
                                     break;
                                 }
-                                var fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp16);
+                                Log.Debug($"Recv fileTime: 0x{fileTime:x}");
+                                //var fileTime = DateTimeOffset.FromUnixTimeSeconds(tmp16);
 
                                 (statusTxfr, tmp16) = await byte16.Receive(socketThe,
                                     cancellationTokenSource.Token);
@@ -305,7 +307,7 @@ static class Server
                                     break;
                                 }
                                 var fileName = Encoding.UTF8.GetString(recvBytes, 0, cntTxfr);
-                                Log.Debug($"#{idCnn} > {fileSizeWant,10} {fileTime:s} '{fileName}'");
+                                Log.Debug($"#{idCnn} > {fileSizeWant,10} '{fileName}'");
                                 Log.Verbose($"#{idCnn} > {fileName}");
 
                                 if (false == await byte16.As(0).Send(socketThe,
@@ -342,7 +344,7 @@ static class Server
                                     Task<int> writeTask = Helper.Write(outFs, buffer.OutputData(),
                                         wantSize:0, md5, cancellationTokenSource.Token);
                                     Task<int> recvTask = ReceiveAndSendResponse();
-                                    while (fileSizeWant >= fileSizeRecv)
+                                    while (true) // (fileSizeWant >= fileSizeRecv)
                                     {
                                         Task.WaitAll(writeTask, recvTask);
                                         writeRealResult = writeTask.Result;
@@ -363,7 +365,7 @@ static class Server
 
                                 cntFille += 1;
                                 sumSize += fileSizeRecv;
-                                if (fileSizeWant!= fileSizeRecv)
+                                if (0 != fileSizeWant && fileSizeWant!= fileSizeRecv)
                                 {
                                     Log.Error($"#{idCnn} > fileSizeRecv:{fileSizeRecv}b but want:{fileSizeWant}b");
                                 }
@@ -395,34 +397,44 @@ static class Server
                                 #endregion
 
                                 #region Rename outputShadowFilename to outputRealFilename
-                                if (File.Exists(outputShadowFilename))
+                                await Task.Run(async () =>
                                 {
-                                    if (File.Exists(outputRealFilename))
+                                    if (File.Exists(outputShadowFilename))
                                     {
-                                        Console.Error.WriteLine(
-                                            $"'{outputRealFilename}' <- '{outputShadowFilename}' failed because already existed.");
-                                    }
-                                    else
-                                    {
-                                        try
+                                        await Task.Delay(10);
+                                        if (File.Exists(outputRealFilename))
                                         {
-                                            var dirThe = Path.GetDirectoryName(outputRealFilename);
-                                            if (false == string.IsNullOrEmpty(dirThe) &&
-                                            false == Directory.Exists(dirThe))
+                                            Console.Error.WriteLine(
+                                                $"'{outputRealFilename}' <- '{outputShadowFilename}' failed because already existed.");
+                                        }
+                                        else
+                                        {
+                                            try
                                             {
-                                                Directory.CreateDirectory(dirThe);
+                                                var dirThe = Path.GetDirectoryName(outputRealFilename);
+                                                if (false == string.IsNullOrEmpty(dirThe) &&
+                                                false == Directory.Exists(dirThe))
+                                                {
+                                                    Directory.CreateDirectory(dirThe);
+                                                }
+                                                File.Move(outputShadowFilename, outputRealFilename);
+                                                if (0 != fileTime)
+                                                {
+                                                    var theTime = DateTimeOffset.FromUnixTimeSeconds(fileTime);
+                                                    Log.Debug($"FileTime'{theTime:s}';0x{fileTime:x} -> '{outputRealFilename}'");
+                                                    File.SetLastWriteTime(path: outputRealFilename,
+                                                        lastWriteTime: theTime.DateTime);
+                                                }
+                                                else Log.Verbose($"Skip ZERO-fileTime '{outputRealFilename}'");
                                             }
-                                            File.Move(outputShadowFilename, outputRealFilename);
-                                            File.SetLastWriteTime(path: outputRealFilename,
-                                                lastWriteTime: fileTime.DateTime);
-                                        }
-                                        catch (Exception)
-                                        {
-                                            Log.Error(
-                                                $"Fail to rename '{outputShadowFilename}' as '{outputRealFilename}'");
+                                            catch (Exception eer)
+                                            {
+                                                Log.Error(
+                                                    $"Fail to rename '{outputShadowFilename}' as '{outputRealFilename}' {eer.Message}");
+                                            }
                                         }
                                     }
-                                }
+                                });
                                 #endregion
                             }
                         }

@@ -1,7 +1,6 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace rcopy2;
@@ -272,9 +271,12 @@ static partial class Helper
               --md5         on       off
               --verbose     off      on
               --buffer-size 2        1  3  4
-              --allow       all      localhost | 192.168.*.* | 192.=.=.* | 192.168.0.2
+              --allow       all      localhost | 192.168.0.* | =.=.=.* | 192.168.0.2
             where
               BufferSize:  1=8K, 2=16K, 3=32K, 4=64K
+              'localhost' at '--allow' to allow connecting at '127.0.0.1' or '[::1]'.
+              Star sign * at '--allow' to allow any digit of remote IP at the corresponding position.
+              Equal sign = at '--allow' to only allow same digit of local IP at the corresponding position.
             """);
         return false;
     }
