@@ -40,7 +40,7 @@ public class Program
         var argsRest = args.Skip(2).Select((it) => new FlagedArg(false, it));
 
         #region --verbose
-        (var verbose, argsRest) = Options.Get("--verbose", argsRest);
+        (var verbose, argsRest) = Options.Parse("--verbose", argsRest);
         Log.VerboseSwitch(verbose?.Equals("on") ?? false);
         #endregion
 
@@ -97,7 +97,7 @@ public class Program
 			return new FilesFrom(File.OpenText(path), (it) => it.Close());
 		}
 
-        (var pathFilesFrom, argsRest) = Options.Get("--files-from", argsRest, shortcut:"-T");
+        (var pathFilesFrom, argsRest) = Options.Parse("--files-from", argsRest, shortcut:"-T");
 		var filesFrom = OpenFilesFrom(pathFilesFrom);
 
 		var paths = argsRest.Select((it) => it.Arg).ToArray();

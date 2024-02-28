@@ -1,4 +1,5 @@
-﻿using System.Net.Sockets;
+﻿using System.Collections.Immutable;
+using System.Net.Sockets;
 using System.Text;
 using static rcopy2.Helper;
 
@@ -9,7 +10,7 @@ static class Server
     public static bool Run(string ipServer, IEnumerable<FlagedArg> argsRest)
     {
         #region --keep-dir
-        (var keepDir, argsRest) = Options.Get("--keep-dir", argsRest);
+        (var keepDir, argsRest) = Options.Parse("--keep-dir", argsRest);
 
         Func<string, string> MakeStandardDirSepFunc()
         {
@@ -39,7 +40,7 @@ static class Server
         #endregion
 
         #region OUT-DIR
-        (var outdir, argsRest) = Options.Get("--out-dir", argsRest);
+        (var outdir, argsRest) = Options.Parse("--out-dir", argsRest);
 
         Func<string, string> ToOutputFilename;
         if (false == string.IsNullOrEmpty(outdir))
@@ -61,7 +62,7 @@ static class Server
 
         byte codeOfBuffserSize = Helper.DefaultCodeOfBufferSize;
         #region --buffer-size
-        (var codeOfBufferText, argsRest) = Options.Get("--buffer-size", argsRest);
+        (var codeOfBufferText, argsRest) = Options.Parse("--buffer-size", argsRest);
         switch (codeOfBufferText)
         {
             case "":
@@ -89,7 +90,7 @@ static class Server
 
         byte md5Code = MD5REQUIRED;
         #region --md5
-        (var md5CtrlText, argsRest) = Options.Get("--md5", argsRest);
+        (var md5CtrlText, argsRest) = Options.Parse("--md5", argsRest);
         if (false == string.IsNullOrEmpty(md5CtrlText))
         {
             if (md5CtrlText == "off")
@@ -106,17 +107,26 @@ static class Server
 
         Func<string, string, bool> ipAllow;
         #region --allow
-        (var ipMask, argsRest) = Options.Get("--allow", argsRest);
-        if (string.IsNullOrEmpty(ipMask))
+        (var ipMasks, argsRest) = Options.ParseForStrings("--allow", argsRest);
+        if (ipMasks.Length == 0)
         {
             ipAllow = (_, _) => true;
         }
         else
         {
-            var tmpIpAllow = MakeIpMask(ipMask);
-            if (tmpIpAllow == null)
-                throw new ArgumentException($"'{ipMask}' is invalid to '--allow'");
-            ipAllow = tmpIpAllow;
+            var aa = ipMasks
+                .Distinct()
+                .Select((it) => MakeIpMask(it, "--allow"))
+                .ToArray();
+            if (aa.Length == 0)
+            {
+                ipAllow = (_, _) => true;
+            }
+            else
+            {
+                ipAllow = (a2, a3) => aa
+                    .Any((it) => it(a2, a3));
+            }
         }
         #endregion
 

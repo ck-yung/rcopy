@@ -431,8 +431,8 @@ static partial class Helper
     /// </remarks>
     /// <returns>Compare(LocalIp, RemoteIp), or,
     /// null if param "mask" is in wrong format</returns>
-    public static Func<string, string, bool>?
-        MakeIpMask(string mask)
+    public static Func<string, string, bool>
+        MakeIpMask(string mask, string optName)
     {
         if ("all" == mask) return (_, _) => true;
 
@@ -454,7 +454,11 @@ static partial class Helper
             .Select((it) => txtToFunc(it))
             .ToArray();
 
-        if (mm.Length != 4) return null;
+        if (mm.Length != 4)
+        {
+            throw new ArgumentException(
+                $"'{mask}' is invalid to '{optName}'");
+        }
 
         return (ipLocal, ipRemote) =>
         {
