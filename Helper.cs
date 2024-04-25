@@ -268,7 +268,6 @@ static partial class Helper
             OPTIONS:
               NAME          DEFAULT  ALTER
               --keep-dir    on       off
-              --md5         on       off
               --verbose     off      on
               --buffer-size 2        1  3  4
               --allow       all      localhost | 192.168.0.* | =.=.=.* | 192.168.0.2
@@ -281,8 +280,7 @@ static partial class Helper
         return false;
     }
 
-    public const byte MD5REQUIRED = 0x10;
-    public const byte MD5SKIPPED =  0x11;
+    public const byte INIT_CTRL_CODE = 0x10;
 
     [GeneratedRegex(
     @"^(?<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(?<port>\d{1,5})$")]
@@ -375,7 +373,7 @@ static partial class Helper
     }
 
     public static async Task<int> Read(FileStream stream,
-        byte[] data, int wantSize, IMD5 md5, CancellationToken token)
+        byte[] data, int wantSize, CancellationToken token)
     {
         int rtn = 0;
         int offset = 0;
@@ -389,15 +387,13 @@ static partial class Helper
             offset += cntTxfr;
             wantSize2 -= cntTxfr;
         }
-        md5.AddData(data, rtn);
         return rtn;
     }
 
     public static async Task<int> Write(FileStream stream,
-        byte[] data, int wantSize, IMD5 md5, CancellationToken token)
+        byte[] data, int wantSize, CancellationToken token)
     {
         if (wantSize < 1) return 0;
-        md5.AddData(data, wantSize);
         await stream.WriteAsync(data, 0, wantSize, token);
         return wantSize;
     }
@@ -484,84 +480,6 @@ static partial class Helper
             .Zip(mm)
             .All((it) => it.Second(it.First.First, it.First.Second));
         };
-    }
-}
-
-internal interface IMD5
-{
-    string GetName();
-    void AddData(byte[] data, int length);
-    byte[] Get();
-    bool CheckWith(byte[] otherMd5, int length);
-}
-
-internal static class Md5Factory
-{
-    class Md5Real : IMD5
-    {
-        readonly IncrementalHash Md5 = IncrementalHash
-            .CreateHash(HashAlgorithmName.MD5);
-
-        public void AddData(byte[] data, int length)
-        {
-            if (length > 0)
-            {
-                if (length > 4)
-                {
-                    Log.Debug($"Md5Real.AddData(length:{length}) {data[0]:X2}.{data[1]}:X2.{data[2]:X2}.{data[3]:X2}");
-                }
-                else
-                {
-                    Log.Debug($"Md5Real.AddData(length:{length})");
-                }
-                Md5.AppendData(data, 0, length);
-            }
-        }
-
-        public byte[] Get()
-        {
-            return Md5.GetCurrentHash();
-        }
-        public string GetName() => "Real";
-
-        public bool CheckWith(byte[] otherMd5, int length)
-        {
-            Log.Debug($"MD5 CheckWith (otherLength:{length}) is called");
-            var md5The = Get();
-            if (true != otherMd5.Compare(md5The, length))
-            {
-                var md5TheText = BitConverter.ToString(
-                    md5The, startIndex: 0, length: md5The.Length)
-                    .Replace("-", "").ToLower();
-                var md5OtherText = BitConverter.ToString(
-                    otherMd5, startIndex: 0, length: length)
-                    .Replace("-", "").ToLower();
-                Log.Debug($"MyMD5 is {md5TheText} but other is {md5OtherText}");
-                return false;
-            }
-
-            return true;
-        }
-    }
-
-    class Md5Fake : IMD5
-    {
-        public void AddData(byte[] data, int length) { }
-        public byte[] Get() => Array.Empty<byte>();
-        public string GetName() => "Fake";
-        public bool CheckWith(byte[] otherMd5, int length)
-        {
-            Log.Debug($"MD5.Null CheckWith(otherLenth:{length}) is called");
-            return true;
-        }
-    }
-
-    static Md5Fake Null = new();
-
-    public static IMD5 Make(bool flag)
-    {
-        if (flag) return new Md5Real();
-        return Null;
     }
 }
 

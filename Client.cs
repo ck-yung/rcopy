@@ -121,7 +121,7 @@ static class Client
             Log.Verbose("Connected");
             socketThe = serverThe.Client;
 
-            (statusTxfr, bufferCode, var md5Code) = await byte02.ReceiveBytes(socketThe,
+            (statusTxfr, bufferCode, var serverControlCode) = await byte02.ReceiveBytes(socketThe,
                 cancellationTokenSource.Token);
             if (false == statusTxfr)
             {
@@ -129,7 +129,7 @@ static class Client
                 return -1;
             }
 
-            if (false == await byte02.As(bufferCode, md5Code).Send(socketThe,
+            if (false == await byte02.As(bufferCode, serverControlCode).Send(socketThe,
                 cancellationTokenSource.Token))
             {
                 Log.Error($"Fail to reply control code!");
@@ -154,7 +154,6 @@ static class Client
                 sentSizeThe = 0;
                 try
                 {
-                    var md5 = Md5Factory.Make(md5Code == Helper.MD5REQUIRED);
                     using var inpFile = File.OpenRead(info.Name);
 
                     int readRealSize = 0;
@@ -163,7 +162,7 @@ static class Client
                         wantSize:0, token:cancellationTokenSource.Token);
 
                     wantSize = maxBufferSize;
-                    readTask = Helper.Read(inpFile, buffer.InputData(), wantSize, md5,
+                    readTask = Helper.Read(inpFile, buffer.InputData(), wantSize,
                             cancellationTokenSource.Token);
 
                     while (true)
@@ -183,7 +182,7 @@ static class Client
 
                         wantSize = maxBufferSize;
 
-                        readTask = Helper.Read(inpFile, buffer.InputData(), wantSize, md5,
+                        readTask = Helper.Read(inpFile, buffer.InputData(), wantSize,
                             cancellationTokenSource.Token);
                     }
 
@@ -192,25 +191,6 @@ static class Client
                         Log.Error($"Fail to send end block size code!");
                         break;
                     }
-
-                    #region MD5
-                    var hash = md5.Get();
-                    wantSize = hash.Length;
-                    if (wantSize > 0)
-                    {
-                        Log.Debug($"{info.Name} sending MD5 (length:{wantSize}b)");
-                        if (false == await byte02.As(wantSize).Send(socketThe, cancellationTokenSource.Token))
-                        {
-                            Log.Error($"Fail to send MD5 size!");
-                            break;
-                        }
-                        if (wantSize != await Helper.Send(socketThe, hash, wantSize, cancellationTokenSource.Token))
-                        {
-                            Log.Error($"Fail to MD5!");
-                            break;
-                        }
-                    }
-                    #endregion
                 }
                 catch (Exception ee2)
                 {

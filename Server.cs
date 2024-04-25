@@ -89,21 +89,9 @@ static class Server
         var maxBufferSize = Helper.GetBufferSize(codeOfBuffserSize);
         Log.Verbose($"BufferSize code:{codeOfBuffserSize} -> {maxBufferSize}; 0x{maxBufferSize:x}");
 
-        byte md5Code = MD5REQUIRED;
-        #region --md5
-        (var md5CtrlText, argsRest) = Options.Parse("--md5", argsRest);
-        if (false == string.IsNullOrEmpty(md5CtrlText))
-        {
-            if (md5CtrlText == "off")
-            {
-                md5Code = MD5SKIPPED;
-            }
-            else if (md5CtrlText != "on")
-            {
-                throw new ArgumentException(
-                    $"Value to '--md5' should be 'on' or 'off' but not '{md5CtrlText}'");
-            }
-        }
+        byte serverControlCode = INIT_CTRL_CODE;
+        #region init control code
+        // (var md5CtrlText, argsRest) = Options.Parse("--md5", argsRest);
         #endregion
 
         Func<string, string, bool> ipAllow;
@@ -259,14 +247,14 @@ static class Server
 
                             var recvBytes = new byte[2048];
 
-                            if (false == await byte02.As(codeOfBuffserSize, md5Code).Send(socketThe,
+                            if (false == await byte02.As(codeOfBuffserSize, serverControlCode).Send(socketThe,
                                 cancellationTokenSource.Token))
                             {
                                 Log.Error($"Fail to send the code of buffer size");
                                 return;
                             }
 
-                            (statusTxfr, var codeRecv, var md5CodeRecv) = await byte02.ReceiveBytes(socketThe,
+                            (statusTxfr, var codeRecv, var recvControlCode) = await byte02.ReceiveBytes(socketThe,
                                 cancellationTokenSource.Token);
                             if (codeOfBuffserSize != codeRecv)
                             {
@@ -274,9 +262,9 @@ static class Server
                                 return;
                             }
 
-                            if (md5CodeRecv != md5Code)
+                            if (recvControlCode != serverControlCode)
                             {
-                                Log.Ok($"#{idCnn} reply different MD5-Flag");
+                                Log.Ok($"#{idCnn} reply different Control-Code");
                             }
 
                             long fileSizeWant;
@@ -345,14 +333,13 @@ static class Server
                                 Log.Debug($"shadow file = '{outputShadowFilename}'");
 
                                 fileSizeRecv = 0;
-                                var md5 = Md5Factory.Make(md5CodeRecv == MD5REQUIRED);
                                 int writeWantSize;
                                 int writeRealResult;
                                 int seqThe = 0;
                                 using (var outFs = File.Create(outputShadowFilename))
                                 {
                                     Task<int> writeTask = Helper.Write(outFs, buffer.OutputData(),
-                                        wantSize:0, md5, cancellationTokenSource.Token);
+                                        wantSize:0, cancellationTokenSource.Token);
                                     Task<int> recvTask = ReceiveAndSendResponse();
                                     while (true) // (fileSizeWant >= fileSizeRecv)
                                     {
@@ -368,7 +355,7 @@ static class Server
                                         seqThe++;
                                         buffer.Switch();
                                         writeTask = Helper.Write(outFs, buffer.OutputData(),
-                                            wantSize: writeWantSize, md5, cancellationTokenSource.Token);
+                                            wantSize: writeWantSize, cancellationTokenSource.Token);
                                         recvTask = ReceiveAndSendResponse();
                                     }
                                 }
@@ -379,32 +366,6 @@ static class Server
                                 {
                                     Log.Error($"#{idCnn} > fileSizeRecv:{fileSizeRecv}b but want:{fileSizeWant}b");
                                 }
-
-                                #region MD5
-                                if (md5CodeRecv == MD5REQUIRED)
-                                {
-                                    //Log.Debug("Wait MD5 ..");
-                                    (statusTxfr, tmp02) = await byte02.Receive(socketThe,
-                                        cancellationTokenSource.Token);
-                                    Log.Debug($"MD5-size recv (status:{statusTxfr}; length:{tmp02})");
-                                    if (false == statusTxfr)
-                                    {
-                                        break;
-                                    }
-                                    if (1 > tmp02)
-                                    {
-                                        Log.Error("MD5 size is ZERO!");
-                                        break;
-                                    }
-                                    cntTxfr = await Helper.Recv(socketThe, recvBytes, tmp02,
-                                        cancellationTokenSource.Token);
-                                    //Log.Debug($"MD5 recv (status:{statusTxfr}; realLength:{tmp02})");
-                                    if (true!=md5.CheckWith(recvBytes, cntTxfr))
-                                    {
-                                        Log.Error($"MD5 is mis-matched!");
-                                    }
-                                }
-                                #endregion
 
                                 #region Rename outputShadowFilename to outputRealFilename
                                 await Task.Run(async () =>
