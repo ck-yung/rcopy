@@ -139,10 +139,11 @@ static class Server
 
         Task.Run(async () =>
         {
+            bool isRunning = true;
             try
             {
                 var socketQueue = new ClientQueue();
-                while (true)
+                while (isRunning)
                 {
                     var remoteSocket = await listener.AcceptSocketAsync(
                         cancellationTokenSource.Token);
@@ -267,32 +268,36 @@ static class Server
                                 Log.Ok($"#{idCnn} reply different Control-Code");
                             }
 
-                            long fileSizeWant;
-                            long fileTime;
-                            while (true)
+                            //long fileSizeWant;
+                            //long fileTime;
+                            while (isRunning)
                             {
-                                (statusTxfr, fileTime) = await byte16.Receive(socketThe,
-                                    cancellationTokenSource.Token);
-                                if (false == statusTxfr)
-                                {
-                                    break;
-                                }
-                                Log.Debug($"Recv fileTime: 0x{fileTime:x}");
+                                //(statusTxfr, fileTime) = await byte16.Receive(socketThe,
+                                //    cancellationTokenSource.Token);
+                                //if (false == statusTxfr)
+                                //{
+                                //    break;
+                                //}
+                                //Log.Debug($"Recv fileTime: 0x{fileTime:x}");
 
-                                (statusTxfr, tmp16) = await byte16.Receive(socketThe,
-                                    cancellationTokenSource.Token);
-                                if (false == statusTxfr)
-                                {
-                                    Log.Ok($"Read file-size failed!");
-                                    break;
-                                }
-                                fileSizeWant = tmp16;
+                                //(statusTxfr, tmp16) = await byte16.Receive(socketThe,
+                                //    cancellationTokenSource.Token);
+                                //if (false == statusTxfr)
+                                //{
+                                //    Log.Ok($"Read file-size failed!");
+                                //    break;
+                                //}
+                                //fileSizeWant = tmp16;
 
                                 (statusTxfr, sizeWant) = await byte02.Receive(
                                     socketThe, cancellationTokenSource.Token);
-                                if ((false == statusTxfr) || (sizeWant == 0))
+                                if (false == statusTxfr)
                                 {
-                                    Log.Ok($"Read length-of-file-name failed!");
+                                    break;
+                                }
+                                if (sizeWant == 0)
+                                {
+                                    Log.Ok($"Read length-of-file-name failed! (sizeWant:{sizeWant})");
                                     break;
                                 }
 
@@ -305,7 +310,7 @@ static class Server
                                     break;
                                 }
                                 var fileName = Encoding.UTF8.GetString(recvBytes, 0, cntTxfr);
-                                Log.Debug($"#{idCnn} > {fileSizeWant,10} '{fileName}'");
+                                //Log.Debug($"#{idCnn} > {fileSizeWant,10} '{fileName}'");
                                 Log.Verbose($"#{idCnn} > {fileName}");
 
                                 if (false == await byte16.As(0).Send(socketThe,
@@ -362,10 +367,10 @@ static class Server
 
                                 cntFille += 1;
                                 sumSize += fileSizeRecv;
-                                if (0 != fileSizeWant && fileSizeWant!= fileSizeRecv)
-                                {
-                                    Log.Error($"#{idCnn} > fileSizeRecv:{fileSizeRecv}b but want:{fileSizeWant}b");
-                                }
+                                //if (0 != fileSizeWant && fileSizeWant!= fileSizeRecv)
+                                //{
+                                //    Log.Error($"#{idCnn} > fileSizeRecv:{fileSizeRecv}b but want:{fileSizeWant}b");
+                                //}
 
                                 #region Rename outputShadowFilename to outputRealFilename
                                 await Task.Run(async () =>
@@ -389,19 +394,19 @@ static class Server
                                                     Directory.CreateDirectory(dirThe);
                                                 }
                                                 File.Move(outputShadowFilename, outputRealFilename);
-                                                if (0 != fileTime)
-                                                {
-                                                    var theTime = DateTimeOffset.FromUnixTimeSeconds(fileTime);
-                                                    Log.Debug($"FileTime'{theTime:s}';0x{fileTime:x} -> '{outputRealFilename}'");
-                                                    File.SetLastWriteTime(path: outputRealFilename,
-                                                        lastWriteTime: theTime.DateTime);
-                                                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                                                    || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                                                    {
-                                                        File.SetCreationTime(path: outputRealFilename, creationTime: DateTime.Now);
-                                                    }
-                                                }
-                                                else Log.Verbose($"Skip ZERO-fileTime '{outputRealFilename}'");
+                                                //if (0 != fileTime)
+                                                //{
+                                                //    var theTime = DateTimeOffset.FromUnixTimeSeconds(fileTime);
+                                                //    Log.Debug($"FileTime'{theTime:s}';0x{fileTime:x} -> '{outputRealFilename}'");
+                                                //    File.SetLastWriteTime(path: outputRealFilename,
+                                                //        lastWriteTime: theTime.DateTime);
+                                                //    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                                                //    || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                                                //    {
+                                                //        File.SetCreationTime(path: outputRealFilename, creationTime: DateTime.Now);
+                                                //    }
+                                                //}
+                                                //else Log.Verbose($"Skip ZERO-fileTime '{outputRealFilename}'");
                                             }
                                             catch (Exception eer)
                                             {
@@ -412,6 +417,9 @@ static class Server
                                     }
                                 });
                                 #endregion
+
+                                await Task.Delay(1000);
+                                isRunning = false;
                             }
                         }
                         catch (Exception ee)
@@ -426,6 +434,11 @@ static class Server
                             await Task.Delay(20);
                             socketThe.Close();
                         }
+                        await Task.Delay(1000);
+                        if (false == isRunning)
+                        {
+                            listener.Stop();
+                        }
                     });
                 }
             }
@@ -435,7 +448,10 @@ static class Server
             }
             catch (Exception ee)
             {
-                Log.Error("Accept: " + ee.GetType().Name + ": " + ee.Message);
+                if (true == isRunning)
+                {
+                    Log.Error("Accept: " + ee.GetType().Name + ": " + ee.Message);
+                }
             }
 
             try
@@ -446,7 +462,10 @@ static class Server
             }
             catch (Exception ee)
             {
-                Log.Error(ee.GetType().Name + ": " + ee.Message);
+                if (true == isRunning)
+                {
+                    Log.Error(ee.GetType().Name + ": " + ee.Message);
+                }
             }
         }).Wait();
 

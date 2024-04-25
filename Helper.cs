@@ -78,6 +78,7 @@ sealed class Byte2
         Socket socket, CancellationToken cancellation)
     {
         int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
+        //Console.WriteLine($"dbg:Byte2.Recv return {cntTxfr}b;0x{Data[1]:x2}.{Data[0]:x2}");
         if (cntTxfr != Length) return (false, 0);
         return (true, Value());
     }
@@ -86,6 +87,7 @@ sealed class Byte2
         Socket socket, CancellationToken cancellation)
     {
         int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
+        //Console.WriteLine($"dbg:Byte2.RecvBytes return {cntTxfr}b;0x{Data[1]:x2}.{Data[0]:x2}");
         if (cntTxfr != Length) return (false, 0, 0);
         return (true, Data[0], Data[1]);
     }
@@ -244,9 +246,7 @@ static partial class Helper
     {
         Console.WriteLine($"""
             Syntax:
-              {nameof(rcopy2)} to HOST:PORT FILE [FILE ..]
-              {nameof(rcopy2)} to HOST:PORT --files-from FROM-FILE [FILE ..]
-            Read '--from-from' (short-cut '-T') from redir console input if FROM-FILE is -
+              {nameof(rcopy2)} to HOST:PORT FILE
             
             Syntax:
               {nameof(rcopy2)} on HOST:PORT [--out-dir OUT-DIR] [OPTIONS]

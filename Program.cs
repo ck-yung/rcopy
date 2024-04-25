@@ -1,5 +1,4 @@
 ﻿using System.Net.Sockets;
-using static System.Console;
 
 namespace rcopy2;
 
@@ -14,15 +13,15 @@ public class Program
         }
         catch (ArgumentException ae)
         {
-            WriteLine($"Argument: {ae.Message}");
+            Console.WriteLine($"Argument: {ae.Message}");
         }
         catch (SocketException se)
         {
-            WriteLine($"Socket: {se.Message}");
+            Console.WriteLine($"Socket: {se.Message}");
         }
         catch (Exception ee)
         {
-            WriteLine(ee.ToString());
+            Console.WriteLine(ee.ToString());
         }
     }
 
@@ -55,67 +54,25 @@ public class Program
         }
     }
 
-    record FilesFrom(StreamReader Input, Action<StreamReader> CloseAction)
-    {
-        public static FilesFrom Null = new (StreamReader.Null, (_) => { });
-        public void Close()
-        {
-            CloseAction(Input);
-        }
-        public IEnumerable<string> GetPathsFrom()
-        {
-            while (true)
-            {
-                var lineThe = Input.ReadLine();
-                if (lineThe == null) break;
-                yield return lineThe;
-            }
-        }
-    }
-
     static bool SendTo(string ipTarget, IEnumerable<FlagedArg> argsRest)
     {
-        FilesFrom OpenFilesFrom(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return FilesFrom.Null;
-            Log.Verbose($"Files-from is '{path}'");
-            if (path == "-")
-            {
-                if (false == Console.IsInputRedirected)
-                {
-                    Helper.PrintSyntax();
-                    return FilesFrom.Null;
-                }
-                return new FilesFrom(new StreamReader(OpenStandardInput()),
-                    (_) => { });
-            }
+        string[] paths = argsRest
+            .Select((it) => it.Arg)
+            .Distinct()
+            .Where((it) => File.Exists(it))
+            .Take(2)
+            .ToArray();
 
-            if (false == File.Exists(path))
-            {
-                WriteLine($"File '{path}' (--files-from) is NOT found!");
-                return new FilesFrom(StreamReader.Null, (_) => { });
-            }
-            return new FilesFrom(File.OpenText(path), (it) => it.Close());
+        if (paths.Length > 1)
+        {
+            Console.WriteLine($"Too many ('{paths[0]}','{paths[1]}') FILE!");
+            return false;
         }
 
-        (var pathFilesFrom, argsRest) = Options.Parse(
-            "--files-from", argsRest, shortcut:"-T");
-        var filesFrom = OpenFilesFrom(pathFilesFrom);
-
-        var paths = argsRest.Select((it) => it.Arg).ToArray();
-        //Log.Verbose($"paths={string.Join(';',paths)}");
-
-        IEnumerable<Info> infos = filesFrom.GetPathsFrom()
-            .Select((it) => it.Trim())
-            .Union(paths)
-            .Distinct()
-            .Select((it) => new Info(it, new FileInfo(it)))
-            .Where((it) => it.File.Exists);
-
-        var taskResult = Client.Run(ipTarget, infos);
+        var taskResult = Client.Run(ipTarget, new Info(paths[0], new FileInfo(paths[0])));
         taskResult.Wait();
-        filesFrom.Close();
-        if (1 > taskResult.Result) WriteLine("No file is sent.");
+
+        if (1 > taskResult.Result) Console.WriteLine("No file is sent.");
         return taskResult.Result > 0;
     }
 }

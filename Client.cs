@@ -5,7 +5,7 @@ namespace rcopy2;
 
 static class Client
 {
-    public static async Task<int> Run(string ipServer, IEnumerable<Info> infos)
+    public static async Task<int> Run(string ipServer, Info arg)
     {
         var cancellationTokenSource = new CancellationTokenSource();
         var byte01 = new Byte1();
@@ -18,23 +18,23 @@ static class Client
         {
             var byte16 = new Byte16();
 
-            long tmp2 = new DateTimeOffset(info.File.LastWriteTimeUtc).ToUnixTimeSeconds();
-            Log.Debug($"Send fileTime: 0x{tmp2:x}");
-            if (false == await byte16.As(tmp2).Send(socket, cancellationTokenSource.Token))
-            {
-                Log.Error($"Fail to send date-time");
-                return 0;
-            }
-
-            tmp2 = info.File.Length;
-            if (false == await byte16.As(tmp2).Send(socket, cancellationTokenSource.Token))
-            {
-                Log.Error($"Fail to send file-size");
-                return 0;
-            }
+            //long tmp2 = new DateTimeOffset(info.File.LastWriteTimeUtc).ToUnixTimeSeconds();
+            //Log.Debug($"Send fileTime: 0x{tmp2:x}");
+            //if (false == await byte16.As(tmp2).Send(socket, cancellationTokenSource.Token))
+            //{
+            //    Log.Error($"Fail to send date-time");
+            //    return 0;
+            //}
+            //tmp2 = info.File.Length;
+            //if (false == await byte16.As(tmp2).Send(socket, cancellationTokenSource.Token))
+            //{
+            //    Log.Error($"Fail to send file-size");
+            //    return 0;
+            //}
 
             var bytesPath = Encoding.UTF8.GetBytes(info.Name);
             byte02.As(bytesPath.Length);
+            //Log.Ok($"dbg:Send name-size in 0x{byte02.Data[1]:x2}.{byte02.Data[0]:x2}");
             if (false == await byte02.Send(socket, cancellationTokenSource.Token))
             {
                 Log.Error($"Fail to send name-size");
@@ -140,11 +140,11 @@ static class Client
             Log.Debug($"Buffer code:{bufferCode} -> size:{maxBufferSize}b");
             buffer = new Buffer(maxBufferSize);
 
-            foreach (var info in infos)
+            foreach (var info in new Info[] {arg})
             {
-                Log.Verbose($"File> {info.Name}");
+                Log.Verbose($"File> {arg.Name}");
 
-                if (0 == await SendFileInfo(socketThe, info))
+                if (0 == await SendFileInfo(socketThe, arg))
                 {
                     break;
                 }
@@ -154,7 +154,7 @@ static class Client
                 sentSizeThe = 0;
                 try
                 {
-                    using var inpFile = File.OpenRead(info.Name);
+                    using var inpFile = File.OpenRead(arg.Name);
 
                     int readRealSize = 0;
 
@@ -171,10 +171,10 @@ static class Client
                         readRealSize = readTask.Result;
                         if (readRealSize == 0)
                         {
-                            Log.Debug($"{info.Name} read is completed");
+                            Log.Debug($"{arg.Name} read is completed");
                             break;
                         }
-                        Log.Debug($"{info.Name} read {readRealSize}b and send.RSP:{sendTask.Result}");
+                        Log.Debug($"{arg.Name} read {readRealSize}b and send.RSP:{sendTask.Result}");
 
                         buffer.Switch();
 
@@ -194,7 +194,7 @@ static class Client
                 }
                 catch (Exception ee2)
                 {
-                    Log.Error($"'{info.Name}' {ee2}");
+                    Log.Error($"'{arg.Name}' {ee2}");
                 }
 
                 cntFile += 1;
