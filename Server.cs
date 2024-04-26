@@ -44,20 +44,19 @@ static class Server
         }
         #endregion
 
-        #region OUT-DIR
-        (var outdir, argsRest) = Options.Parse("--out-dir", argsRest);
+        #region OUT-FILE
+        (var outFilename, argsRest) = Options.Parse("--out-file", argsRest);
 
         Func<string, string> ToOutputFilename;
-        if (false == string.IsNullOrEmpty(outdir))
+        if (false == string.IsNullOrEmpty(outFilename))
         {
-            if (false == Directory.Exists(outdir))
+            if (File.Exists(outFilename))
             {
                 throw new ArgumentException(
-                    $"Output dir '{outdir}' is NOT found!");
+                    $"Output file '{outFilename}' does ALREADY exist!");
             }
-            Log.Ok($"Output dir is '{outdir}'");
-            ToOutputFilename = (it) => Path.Join(outdir,
-                ToStandardDirSep(it));
+            Log.Ok($"Output file is '{outFilename}'");
+            ToOutputFilename = (_) => outFilename;
         }
         else
         {

@@ -312,7 +312,7 @@ static partial class Helper
               {nameof(rcopy)} to HOST:PORT FILE
             
             Syntax:
-              {nameof(rcopy)} on HOST:PORT [--out-dir OUT-DIR] [OPTIONS]
+              {nameof(rcopy)} on HOST:PORT [--out-file NEW-FILE] [OPTIONS]
             """);
         if (false == isDetailed)
         {
@@ -607,6 +607,12 @@ internal class OpenFile
         {
             if (isNew)
             {
+                var dirThe = Path.GetDirectoryName(path) ?? string.Empty;
+                if ((false == string.IsNullOrEmpty(dirThe)) &&
+                    (false == Directory.Exists(dirThe)))
+                {
+                    Directory.CreateDirectory(dirThe);
+                }
                 Stream = File.Create(path);
             }
             else
