@@ -59,7 +59,7 @@ public class Program
         string[] paths = argsRest
             .Select((it) => it.Arg)
             .Distinct()
-            .Where((it) => File.Exists(it))
+            .Where((it) => File.Exists(it) || it == "-")
             .Take(2)
             .ToArray();
 
@@ -69,7 +69,7 @@ public class Program
             return false;
         }
 
-        var taskResult = Client.Run(ipTarget, new Info(paths[0], new FileInfo(paths[0])));
+        var taskResult = Client.Run(ipTarget, paths[0]);
         taskResult.Wait();
 
         if (1 > taskResult.Result) Log.Ok("No file is sent.");

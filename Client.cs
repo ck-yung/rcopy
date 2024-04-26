@@ -5,7 +5,7 @@ namespace rcopy;
 
 static class Client
 {
-    public static async Task<int> Run(string ipServer, Info arg)
+    public static async Task<int> Run(string ipServer, string path)
     {
         var cancellationTokenSource = new CancellationTokenSource();
         var byte01 = new Byte1();
@@ -14,11 +14,11 @@ static class Client
         Buffer buffer;
 
         bool statusTxfr;
-        async Task<int> SendFileInfo(Socket socket, Info info)
+        async Task<int> SendFileInfo(Socket socket, string path)
         {
             var byte16 = new Byte16();
 
-            var bytesPath = Encoding.UTF8.GetBytes(info.Name);
+            var bytesPath = Encoding.UTF8.GetBytes(path);
             byte02.As(bytesPath.Length);
             if (false == await byte02.Send(socket, cancellationTokenSource.Token))
             {
@@ -126,11 +126,12 @@ static class Client
             Log.Debug("Buffer code:{0} -> size:{1}b", bufferCode, maxBufferSize);
             buffer = new Buffer(maxBufferSize);
 
-            foreach (var info in new Info[] {arg})
+            //foreach (var info in new Info[] {arg})
+            foreach (var filename in new string[] {path})
             {
-                Log.Verbose("File> '{0}'", arg.Name);
+                Log.Verbose("File> '{0}'", filename);
 
-                if (0 == await SendFileInfo(socketThe, arg))
+                if (0 == await SendFileInfo(socketThe, filename))
                 {
                     break;
                 }
@@ -140,7 +141,8 @@ static class Client
                 sentSizeThe = 0;
                 try
                 {
-                    using var inpFile = File.OpenRead(arg.Name);
+                    var inp = new OpenFile(filename);
+                    var inpFile = inp.Stream;
 
                     int readRealSize = 0;
 
@@ -157,11 +159,11 @@ static class Client
                         readRealSize = readTask.Result;
                         if (readRealSize == 0)
                         {
-                            Log.Debug("{0} read is completed", arg.Name);
+                            Log.Debug("{0} read is completed", filename);
                             break;
                         }
                         Log.Debug("{0} read {1}b and send.RSP:{2}",
-                            arg.Name, readRealSize, sendTask.Result);
+                            filename, readRealSize, sendTask.Result);
 
                         buffer.Switch();
 
@@ -178,10 +180,11 @@ static class Client
                         Log.Error($"Fail to send end block size code!");
                         break;
                     }
+                    inp.Close();
                 }
                 catch (Exception ee2)
                 {
-                    Log.Error($"'{arg.Name}' {ee2}");
+                    Log.Error($"'{filename}' {ee2}");
                 }
 
                 cntFile += 1;

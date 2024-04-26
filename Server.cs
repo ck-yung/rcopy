@@ -302,6 +302,7 @@ static class Server
                                     break;
                                 }
 
+                                fileName = FilenameFromStdout(fileName);
                                 var outputRealFilename = ToOutputFilename(fileName);
                                 Log.Debug("Real output file = '{0}'", outputRealFilename);
 
@@ -455,5 +456,16 @@ static class Server
 
         Task.Delay(20).Wait();
         return true;
+    }
+
+    static string FilenameFromStdout(string path)
+    {
+        if (path == "-")
+        {
+            return nameof(rcopy)
+                + DateTime.Now.ToString("_yyyy-MMdd_HHmm")
+                + ".dat";
+        }
+        return path;
     }
 }

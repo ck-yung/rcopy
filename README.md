@@ -1,4 +1,4 @@
-# rcopy2
+# rcopy
 
 * TCP/IP file transfer by C#
 

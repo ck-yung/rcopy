@@ -4,8 +4,6 @@ using System.Text.RegularExpressions;
 
 namespace rcopy;
 
-record Info(string Name, FileInfo File);
-
 sealed class Byte1
 {
     public const int Length = 1;
@@ -437,7 +435,7 @@ static partial class Helper
         return true;
     }
 
-    public static async Task<int> Read(FileStream stream,
+    public static async Task<int> Read(Stream stream,
         byte[] data, int wantSize, CancellationToken token)
     {
         int rtn = 0;
@@ -455,7 +453,7 @@ static partial class Helper
         return rtn;
     }
 
-    public static async Task<int> Write(FileStream stream,
+    public static async Task<int> Write(Stream stream,
         byte[] data, int wantSize, CancellationToken token)
     {
         if (wantSize < 1) return 0;
@@ -575,5 +573,38 @@ internal class Buffer
     {
         flag = !flag;
         return flag;
+    }
+}
+
+internal class OpenFile
+{
+    public Stream Stream { get; init; }
+    Action<Stream> CloseImpl { get; set; } = (it) => it.Close();
+
+    public OpenFile(string path, bool isNew = false)
+    {
+        if ("-" == path)
+        {
+            CloseImpl = (_) => { };
+            Stream = isNew
+                ? Console.OpenStandardOutput()
+                : Console.OpenStandardInput();
+        }
+        else
+        {
+            if (isNew)
+            {
+                Stream = File.Create(path);
+            }
+            else
+            {
+                Stream = File.OpenRead(path);
+            }
+        }
+    }
+
+    public void Close()
+    {
+        CloseImpl(Stream);
     }
 }
