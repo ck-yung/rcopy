@@ -2,7 +2,7 @@
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
 
-namespace rcopy2;
+namespace rcopy;
 
 record Info(string Name, FileInfo File);
 
@@ -270,7 +270,7 @@ static internal class Log
         }
         else
         {
-            var tmp2 = Environment.GetEnvironmentVariable(nameof(rcopy2));
+            var tmp2 = Environment.GetEnvironmentVariable(nameof(rcopy));
             if (tmp2?.Contains("debug:on") ?? false)
             {
                 DebugTo = LogType.Stderr;
@@ -311,17 +311,17 @@ static partial class Helper
     {
         Console.WriteLine($"""
             Syntax:
-              {nameof(rcopy2)} to HOST:PORT FILE
+              {nameof(rcopy)} to HOST:PORT FILE
             
             Syntax:
-              {nameof(rcopy2)} on HOST:PORT [--out-dir OUT-DIR] [OPTIONS]
+              {nameof(rcopy)} on HOST:PORT [--out-dir OUT-DIR] [OPTIONS]
             """);
         if (false == isDetailed)
         {
             Console.WriteLine($"""
 
                 Syntax:
-                  {nameof(rcopy2)} --help
+                  {nameof(rcopy)} --help
                 """);
             return false;
         }

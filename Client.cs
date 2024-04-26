@@ -1,7 +1,7 @@
 ﻿using System.Net.Sockets;
 using System.Text;
-using static rcopy2.Helper;
-namespace rcopy2;
+using static rcopy.Helper;
+namespace rcopy;
 
 static class Client
 {

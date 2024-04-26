@@ -2,9 +2,9 @@
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
-using static rcopy2.Helper;
+using static rcopy.Helper;
 
-namespace rcopy2;
+namespace rcopy;
 
 static class Server
 {
@@ -305,7 +305,7 @@ static class Server
                                 var outputRealFilename = ToOutputFilename(fileName);
                                 Log.Debug("Real output file = '{0}'", outputRealFilename);
 
-                                var prefixShadowFilename = "rcopy2_"
+                                var prefixShadowFilename = "rcopy_"
                                 + Path.GetFileName(fileName)
                                 + DateTime.Now.ToString("_yyyy-MMdd_HHmm-ffff");
 

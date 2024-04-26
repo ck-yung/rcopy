@@ -1,6 +1,6 @@
 ﻿using System.Xml.Linq;
 
-namespace rcopy2;
+namespace rcopy;
 
 record FlagedArg(bool Flag, string Arg);
 

@@ -1,6 +1,6 @@
 ﻿using System.Net.Sockets;
 
-namespace rcopy2;
+namespace rcopy;
 
 public class Program
 {
