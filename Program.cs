@@ -1,4 +1,5 @@
 ﻿using System.Net.Sockets;
+using System.Reflection.Metadata.Ecma335;
 
 namespace rcopy;
 
@@ -43,15 +44,12 @@ public class Program
         Log.VerboseSwitch(verbose?.Equals("on") ?? false);
         #endregion
 
-        switch (commandThe)
+        return commandThe switch
         {
-            case "on":
-                return Server.Run(ipThe, argsRest);
-            case "to":
-                return SendTo(ipThe, argsRest);
-            default:
-                return Helper.PrintSyntax();
-        }
+            "on" => Server.Run(ipThe, argsRest),
+            "to" => SendTo(ipThe, argsRest),
+            _ => Helper.PrintSyntax(),
+        };
     }
 
     static bool SendTo(string ipTarget, IEnumerable<FlagedArg> argsRest)

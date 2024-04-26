@@ -140,7 +140,7 @@ sealed class Byte16
 
 sealed class ClientQueue
 {
-    Queue<(int,Socket)> Queue = new();
+    readonly Queue<(int,Socket)> Queue = new();
     int AddCount = 0;
 
     public int Add(Socket socket)
@@ -288,21 +288,15 @@ static partial class Helper
 
     public static int GetBufferSize(byte code)
     {
-        switch (code)
+        return code switch
         {
-            case 1:
-                return 0x2000; // 8K
-            case 2:
-                return 0x4000; // 16K
-            case 3:
-                return 0x8000; // 32K
-            case 4:
-                return 0x10000; // 64K
-            default:
-                throw new ArgumentOutOfRangeException(
-                    $"Invalid CodeOfBuffer:{code} is found!");
-
-        }
+            1 => 0x2000,// 8K
+            2 => 0x4000,// 16K
+            3 => 0x8000,// 32K
+            4 => 0x10000,// 64K
+            _ => throw new ArgumentOutOfRangeException(
+                                $"Invalid CodeOfBuffer:{code} is found!"),
+        };
     }
 
     static public bool PrintSyntax(bool isDetailed = false)
@@ -444,7 +438,7 @@ static partial class Helper
         int cntTxfr;
         while (0 < wantSize2)
         {
-            cntTxfr = await stream.ReadAsync(data, offset, wantSize2, token);
+            cntTxfr = await stream.ReadAsync(data.AsMemory(offset, wantSize2), token);
             if (cntTxfr < 1) break;
             rtn += cntTxfr;
             offset += cntTxfr;
@@ -457,7 +451,7 @@ static partial class Helper
         byte[] data, int wantSize, CancellationToken token)
     {
         if (wantSize < 1) return 0;
-        await stream.WriteAsync(data, 0, wantSize, token);
+        await stream.WriteAsync(data.AsMemory(0, wantSize), token);
         return wantSize;
     }
 
@@ -498,15 +492,15 @@ static partial class Helper
         if ("localhost" == mask) return (_, arg)
                 => arg.StartsWith("127.0.0.1:") || arg.StartsWith("[::1]:");
 
-        Func<string, Func<string, string, bool>> txtToFunc = (arg) =>
+        Func<string, string, bool> txtToFunc(string arg)
         {
-            switch(arg)
+            return arg switch
             {
-                case "=": return (a2, b2) => a2 == b2;
-                case "*": return (_, _) => true;
-                default: return (_, c2) => arg == c2;
-            }
-        };
+                "=" => (a2, b2) => a2 == b2,
+                "*" => (_, _) => true,
+                _ => (_, c2) => arg == c2,
+            };
+        }
 
         var mm = mask
             .Split('.', count: 5)
@@ -546,18 +540,11 @@ static partial class Helper
     }
 }
 
-internal class Buffer
+internal class Buffer(int size)
 {
-    bool flag;
-    byte[] bufferA;
-    byte[] bufferB;
-
-    public Buffer(int size)
-    {
-        flag = false;
-        bufferA = new byte[size];
-        bufferB = new byte[size];
-    }
+    bool flag = false;
+    readonly byte[] bufferA = new byte[size];
+    readonly byte[] bufferB = new byte[size];
 
     public byte[] InputData()
     {

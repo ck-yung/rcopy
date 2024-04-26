@@ -26,22 +26,14 @@ static class Server
             return (it) => it.Replace('/', '\\');
         }
 
-        Func<string, string> ToStandardDirSep;
-        switch (keepDir)
+        Func<string, string> ToStandardDirSep = keepDir switch
         {
-            case "":
-                ToStandardDirSep = MakeStandardDirSepFunc();
-                break;
-            case "on":
-                ToStandardDirSep = MakeStandardDirSepFunc();
-                break;
-            case "off":
-                ToStandardDirSep = (it) => Path.GetFileName(it);
-                break;
-            default:
-                throw new ArgumentException(
-                    $"Value to '--keep-dir' should be 'on' or 'off' but not '{keepDir}'");
-        }
+            "" => MakeStandardDirSepFunc(),
+            "on" => MakeStandardDirSepFunc(),
+            "off" => (it) => Path.GetFileName(it),
+            _ => throw new ArgumentException(
+                $"Value to '--keep-dir' should be 'on' or 'off' but not '{keepDir}'"),
+        };
         #endregion
 
         #region OUT-FILE
@@ -67,27 +59,16 @@ static class Server
         byte codeOfBufferSize = Helper.DefaultCodeOfBufferSize;
         #region --buffer-size
         (var codeOfBufferText, argsRest) = Options.Parse("--buffer-size", argsRest);
-        switch (codeOfBufferText)
+        codeOfBufferSize = codeOfBufferText switch
         {
-            case "":
-                codeOfBufferSize = Helper.DefaultCodeOfBufferSize;
-                break;
-            case "1": // 8K
-                codeOfBufferSize = 1;
-                break;
-            case "2": // 16K
-                codeOfBufferSize = 2;
-                break;
-            case "3": // 32K
-                codeOfBufferSize = 3;
-                break;
-            case "4": // 64K
-                codeOfBufferSize = 4;
-                break;
-            default:
-                throw new ArgumentException(
-                    $"Value '{codeOfBufferText}' to '--buffer-size' is invalid.");
-        }
+            "" => Helper.DefaultCodeOfBufferSize,
+            "1" => 1, // 08K
+            "2" => 2, // 16K
+            "3" => 3, // 32K
+            "4" => 4, // 64K
+            _ => throw new ArgumentException(
+                                $"Value '{codeOfBufferText}' to '--buffer-size' is invalid."),
+        };
         #endregion
         var maxBufferSize = Helper.GetBufferSize(codeOfBufferSize);
         Log.Verbose("BufferSize code:{0} -> {1}; 0x{1:x}",
