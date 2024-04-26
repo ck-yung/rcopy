@@ -1,6 +1,4 @@
-﻿using System.Collections.Immutable;
-using System.Net.Sockets;
-using System.Runtime.InteropServices;
+﻿using System.Net.Sockets;
 using System.Text;
 using static rcopy.Helper;
 
@@ -10,6 +8,12 @@ static class Server
 {
     public static bool Run(string ipServer, IEnumerable<FlagedArg> argsRest)
     {
+        if (true == Console.IsOutputRedirected)
+        {
+            Log.OkTo = Log.LogType.None;
+            Log.VerboseTo = Log.LogType.None;
+        }
+
         #region --keep-dir
         (var keepDir, argsRest) = Options.Parse("--keep-dir", argsRest);
 
@@ -302,30 +306,38 @@ static class Server
                                     break;
                                 }
 
-                                fileName = FilenameFromStdout(fileName);
-                                var outputRealFilename = ToOutputFilename(fileName);
-                                Log.Debug("Real output file = '{0}'", outputRealFilename);
-
-                                var prefixShadowFilename = "rcopy_"
-                                + Path.GetFileName(fileName)
-                                + DateTime.Now.ToString("_yyyy-MMdd_HHmm-ffff");
-
-                                var outputShadowFilename = ToOutputFilename(prefixShadowFilename + ".tmp");
-                                int tryCnt = 0;
-                                while (File.Exists(outputShadowFilename))
+                                var outputRealFilename = string.Empty;
+                                var prefixShadowFilename = string.Empty;
+                                var outputShadowFilename = fileName;
+                                if ("-" != fileName)
                                 {
-                                    tryCnt += 1;
-                                    outputShadowFilename = ToOutputFilename(
-                                        prefixShadowFilename + $".{tryCnt}.tmp");
+                                    outputRealFilename = ToOutputFilename(fileName);
+                                    Log.Debug("Real output file = '{0}'", outputRealFilename);
+
+                                    prefixShadowFilename = "rcopy_"
+                                    + Path.GetFileName(fileName)
+                                    + DateTime.Now.ToString("_yyyy-MMdd_HHmm-ffff");
+
+                                    outputShadowFilename = ToOutputFilename(prefixShadowFilename + ".tmp");
+                                    int tryCnt = 0;
+                                    while (File.Exists(outputShadowFilename))
+                                    {
+                                        tryCnt += 1;
+                                        outputShadowFilename = ToOutputFilename(
+                                            prefixShadowFilename + $".{tryCnt}.tmp");
+                                    }
+                                    Log.Debug("shadow file = '{0}'", outputShadowFilename);
                                 }
-                                Log.Debug("shadow file = '{0}'", outputShadowFilename);
 
                                 fileSizeRecv = 0;
                                 int writeWantSize;
                                 int writeRealResult;
                                 int seqThe = 0;
-                                using (var outFs = File.Create(outputShadowFilename))
+                                //using (var outFs = File.Create(outputShadowFilename))
+                                var outFile = new OpenFile(outputShadowFilename, isNew: true);
+                                if (true)
                                 {
+                                    var outFs = outFile.Stream;
                                     Task<int> writeTask = Helper.Write(outFs, buffer.OutputData(),
                                         wantSize:0, cancellationTokenSource.Token);
                                     Task<int> recvTask = ReceiveAndSendResponse();
@@ -348,58 +360,45 @@ static class Server
                                         recvTask = ReceiveAndSendResponse();
                                     }
                                 }
+                                outFile.Close();
 
                                 cntFile += 1;
                                 sumSize += fileSizeRecv;
-                                //if (0 != fileSizeWant && fileSizeWant!= fileSizeRecv)
-                                //{
-                                //    Log.Error($"#{idCnn} > fileSizeRecv:{fileSizeRecv}b but want:{fileSizeWant}b");
-                                //}
 
                                 #region Rename outputShadowFilename to outputRealFilename
-                                await Task.Run(async () =>
+                                if ("-" != outputShadowFilename)
                                 {
-                                    if (File.Exists(outputShadowFilename))
+                                    await Task.Run(async () =>
                                     {
-                                        await Task.Delay(10);
-                                        if (File.Exists(outputRealFilename))
+                                        if (File.Exists(outputShadowFilename))
                                         {
-                                            Console.Error.WriteLine(
-                                                $"'{outputRealFilename}' <- '{outputShadowFilename}' failed because already existed.");
-                                        }
-                                        else
-                                        {
-                                            try
+                                            await Task.Delay(10);
+                                            if (File.Exists(outputRealFilename))
                                             {
-                                                var dirThe = Path.GetDirectoryName(outputRealFilename);
-                                                if (false == string.IsNullOrEmpty(dirThe) &&
-                                                false == Directory.Exists(dirThe))
+                                                Console.Error.WriteLine(
+                                                    $"'{outputRealFilename}' <- '{outputShadowFilename}' failed because already existed.");
+                                            }
+                                            else
+                                            {
+                                                try
                                                 {
-                                                    Directory.CreateDirectory(dirThe);
+                                                    var dirThe = Path.GetDirectoryName(outputRealFilename);
+                                                    if (false == string.IsNullOrEmpty(dirThe) &&
+                                                    false == Directory.Exists(dirThe))
+                                                    {
+                                                        Directory.CreateDirectory(dirThe);
+                                                    }
+                                                    File.Move(outputShadowFilename, outputRealFilename);
                                                 }
-                                                File.Move(outputShadowFilename, outputRealFilename);
-                                                //if (0 != fileTime)
-                                                //{
-                                                //    var theTime = DateTimeOffset.FromUnixTimeSeconds(fileTime);
-                                                //    Log.Debug($"FileTime'{theTime:s}';0x{fileTime:x} -> '{outputRealFilename}'");
-                                                //    File.SetLastWriteTime(path: outputRealFilename,
-                                                //        lastWriteTime: theTime.DateTime);
-                                                //    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                                                //    || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                                                //    {
-                                                //        File.SetCreationTime(path: outputRealFilename, creationTime: DateTime.Now);
-                                                //    }
-                                                //}
-                                                //else Log.Verbose($"Skip ZERO-fileTime '{outputRealFilename}'");
-                                            }
-                                            catch (Exception eer)
-                                            {
-                                                Log.Error(
-                                                    $"Fail to rename '{outputShadowFilename}' as '{outputRealFilename}' {eer.Message}");
+                                                catch (Exception eer)
+                                                {
+                                                    Log.Error(
+                                                        $"Fail to rename '{outputShadowFilename}' as '{outputRealFilename}' {eer.Message}");
+                                                }
                                             }
                                         }
-                                    }
-                                });
+                                    });
+                                }
                                 #endregion
 
                                 await Task.Delay(1000);
@@ -456,16 +455,5 @@ static class Server
 
         Task.Delay(20).Wait();
         return true;
-    }
-
-    static string FilenameFromStdout(string path)
-    {
-        if (path == "-")
-        {
-            return nameof(rcopy)
-                + DateTime.Now.ToString("_yyyy-MMdd_HHmm")
-                + ".dat";
-        }
-        return path;
     }
 }

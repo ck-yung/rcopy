@@ -217,7 +217,7 @@ static internal class Log
         }
     }
 
-    internal static LogType OkTo { get; private set; } = LogType.Stdout;
+    internal static LogType OkTo { get; set; } = LogType.Stdout;
     public static void Ok(string format, params object[] args)
     {
         if (OkTo == LogType.Stdout)
@@ -251,7 +251,7 @@ static internal class Log
         }
     }
 
-    internal static LogType VerboseTo { get; private set; } = LogType.None;
+    internal static LogType VerboseTo { get; set; } = LogType.None;
     public static void Verbose(string format, params object[] args)
     {
         if (VerboseTo == LogType.Stderr)
@@ -586,9 +586,22 @@ internal class OpenFile
         if ("-" == path)
         {
             CloseImpl = (_) => { };
-            Stream = isNew
-                ? Console.OpenStandardOutput()
-                : Console.OpenStandardInput();
+            if (isNew)
+            {
+                if (true != Console.IsOutputRedirected)
+                {
+                    throw new Exception("Console output is NOT redirected but 'FILE' is -");
+                }
+                Stream = Console.OpenStandardOutput();
+            }
+            else
+            {
+                if (true != Console.IsInputRedirected)
+                {
+                    throw new Exception("Console input is NOT redirected but 'FILE' is -");
+                }
+                Stream = Console.OpenStandardInput();
+            }
         }
         else
         {
