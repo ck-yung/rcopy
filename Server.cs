@@ -51,7 +51,7 @@ static class Server
                 throw new ArgumentException(
                     $"Output dir '{outdir}' is NOT found!");
             }
-            Console.WriteLine($"Output dir is '{outdir}'");
+            Log.Ok($"Output dir is '{outdir}'");
             ToOutputFilename = (it) => Path.Join(outdir,
                 ToStandardDirSep(it));
         }
@@ -61,33 +61,34 @@ static class Server
         }
         #endregion
 
-        byte codeOfBuffserSize = Helper.DefaultCodeOfBufferSize;
+        byte codeOfBufferSize = Helper.DefaultCodeOfBufferSize;
         #region --buffer-size
         (var codeOfBufferText, argsRest) = Options.Parse("--buffer-size", argsRest);
         switch (codeOfBufferText)
         {
             case "":
-                codeOfBuffserSize = Helper.DefaultCodeOfBufferSize;
+                codeOfBufferSize = Helper.DefaultCodeOfBufferSize;
                 break;
             case "1": // 8K
-                codeOfBuffserSize = 1;
+                codeOfBufferSize = 1;
                 break;
             case "2": // 16K
-                codeOfBuffserSize = 2;
+                codeOfBufferSize = 2;
                 break;
             case "3": // 32K
-                codeOfBuffserSize = 3;
+                codeOfBufferSize = 3;
                 break;
             case "4": // 64K
-                codeOfBuffserSize = 4;
+                codeOfBufferSize = 4;
                 break;
             default:
                 throw new ArgumentException(
                     $"Value '{codeOfBufferText}' to '--buffer-size' is invalid.");
         }
         #endregion
-        var maxBufferSize = Helper.GetBufferSize(codeOfBuffserSize);
-        Log.Verbose($"BufferSize code:{codeOfBuffserSize} -> {maxBufferSize}; 0x{maxBufferSize:x}");
+        var maxBufferSize = Helper.GetBufferSize(codeOfBufferSize);
+        Log.Verbose("BufferSize code:{0} -> {1}; 0x{1:x}",
+            codeOfBufferSize, maxBufferSize);
 
         byte serverControlCode = INIT_CTRL_CODE;
         #region init control code
@@ -123,7 +124,7 @@ static class Server
 
         var endPointThe = ParseIpEndpoint(ipServer);
         var listener = new TcpListener(endPointThe);
-        Log.Ok($"Start listen on {endPointThe.Address} at {endPointThe.Port}");
+        Log.Ok("Start listen on {0} at {1}", endPointThe.Address, endPointThe.Port);
         listener.Start();
         Console.CancelKeyPress += (_, e) =>
         {
@@ -135,7 +136,7 @@ static class Server
             }
         };
 
-        Console.WriteLine("** ** Press Ctrl-C to break.");
+        Log.Ok("** ** Press Ctrl-C to break."); // TODO
 
         Task.Run(async () =>
         {
@@ -158,23 +159,23 @@ static class Server
                             return;
                         }
 
-                        var remoteEndPoint = socketThe.RemoteEndPoint;
-                        if (false == ipAllow(socketThe.LocalEndPoint?.ToString() ?? "?1",
-                            remoteEndPoint?.ToString() ?? "?2"))
+                        var localEndPoint = socketThe.LocalEndPoint?.ToString() ?? "?1";
+                        var remoteEndPoint = socketThe.RemoteEndPoint?.ToString() ?? "?2";
+                        if (false == ipAllow(localEndPoint, remoteEndPoint))
                         {
-                            Log.Ok($"#{idCnn} '{remoteEndPoint}' is rejected to local:'{socketThe.LocalEndPoint}'");
+                            Log.Ok("#{0} '{1}' is rejected to local:'{2}'",
+                                idCnn, remoteEndPoint, localEndPoint);
                             socketThe.Shutdown(SocketShutdown.Both);
                             await Task.Delay(20);
                             socketThe.Close();
                             return;
                         }
-                        Log.Ok($"#{idCnn} '{remoteEndPoint}' connected");
+                        Log.Ok("#{0} '{1}' connected", idCnn, remoteEndPoint);
 
-                        int cntFille = 0;
+                        int cntFile = 0;
                         long sumSize = 0;
                         byte tmp01 = 0;
                         UInt16 tmp02 = 0;
-                        long tmp16 = 0;
                         var byte01 = new Byte1();
                         var byte02 = new Byte2();
                         var byte16 = new Byte16();
@@ -197,19 +198,19 @@ static class Server
                                     return -1;
                                 }
 
-                                if (tmp01 == codeOfBuffserSize)
+                                if (tmp01 == codeOfBufferSize)
                                 {
                                     wantSize = maxBufferSize;
-                                    Log.Debug($"recv CodeOfBuffer");
+                                    Log.Debug("recv CodeOfBuffer");
                                 }
                                 else if (tmp01 == 0xFF)
                                 {
-                                    Log.Debug($"recv EndOfData code");
+                                    Log.Debug("recv EndOfData code");
                                     return 0;
                                 }
                                 else
                                 {
-                                    Log.Debug($"recv code-of-buffer:0x{tmp01:x}");
+                                    Log.Debug("recv code-of-buffer:0x{0:x2}", tmp01);
                                     (statusTxfr, tmp02) = await byte02.Receive(
                                         socketThe, cancellationTokenSource.Token);
                                     if (false == statusTxfr)
@@ -222,18 +223,19 @@ static class Server
                                         return -1;
                                     }
                                     wantSize = tmp02;
-                                    Log.Debug($"{nameof(ReceiveAndSendResponse)} recv wantSize:{tmp02}b");
+                                    Log.Debug("{0} recv wantSize:{1}b",
+                                        nameof(ReceiveAndSendResponse), tmp02);
                                 }
 
                                 if (wantSize < 1)
                                 {
-                                    Log.Debug($"{nameof(ReceiveAndSendResponse)} return ZERO");
+                                    Log.Debug("{0} return ZERO", nameof(ReceiveAndSendResponse));
                                     return 0;
                                 }
 
                                 cntTxfr = await Helper.Recv(socketThe, buffer.InputData(), wantSize,
                                     cancellationTokenSource.Token);
-                                Log.Debug($"recv realSize:{cntTxfr}b");
+                                Log.Debug("recv realSize:{0}b", cntTxfr);
                                 if (1 > cntTxfr) return 0;
 
                                 fileSizeRecv += cntTxfr;
@@ -248,7 +250,7 @@ static class Server
 
                             var recvBytes = new byte[2048];
 
-                            if (false == await byte02.As(codeOfBuffserSize, serverControlCode).Send(socketThe,
+                            if (false == await byte02.As(codeOfBufferSize, serverControlCode).Send(socketThe,
                                 cancellationTokenSource.Token))
                             {
                                 Log.Error($"Fail to send the code of buffer size");
@@ -257,38 +259,19 @@ static class Server
 
                             (statusTxfr, var codeRecv, var recvControlCode) = await byte02.ReceiveBytes(socketThe,
                                 cancellationTokenSource.Token);
-                            if (codeOfBuffserSize != codeRecv)
+                            if (codeOfBufferSize != codeRecv)
                             {
-                                Log.Error($"#{idCnn} reply different CtrlCode x{tmp02:x4} from system x{codeOfBuffserSize:x4}");
+                                Log.Error($"#{idCnn} reply different CtrlCode x{tmp02:x4} from system x{codeOfBufferSize:x4}");
                                 return;
                             }
 
                             if (recvControlCode != serverControlCode)
                             {
-                                Log.Ok($"#{idCnn} reply different Control-Code");
+                                Log.Ok("#{0} reply different Control-Code", idCnn);
                             }
 
-                            //long fileSizeWant;
-                            //long fileTime;
                             while (isRunning)
                             {
-                                //(statusTxfr, fileTime) = await byte16.Receive(socketThe,
-                                //    cancellationTokenSource.Token);
-                                //if (false == statusTxfr)
-                                //{
-                                //    break;
-                                //}
-                                //Log.Debug($"Recv fileTime: 0x{fileTime:x}");
-
-                                //(statusTxfr, tmp16) = await byte16.Receive(socketThe,
-                                //    cancellationTokenSource.Token);
-                                //if (false == statusTxfr)
-                                //{
-                                //    Log.Ok($"Read file-size failed!");
-                                //    break;
-                                //}
-                                //fileSizeWant = tmp16;
-
                                 (statusTxfr, sizeWant) = await byte02.Receive(
                                     socketThe, cancellationTokenSource.Token);
                                 if (false == statusTxfr)
@@ -297,11 +280,11 @@ static class Server
                                 }
                                 if (sizeWant == 0)
                                 {
-                                    Log.Ok($"Read length-of-file-name failed! (sizeWant:{sizeWant})");
+                                    Log.Ok("Read length-of-file-name failed!");
                                     break;
                                 }
 
-                                Log.Debug($"Read length-of-file-name:{sizeWant}");
+                                Log.Debug("Read length-of-file-name:{0}", sizeWant);
                                 cntTxfr = await Helper.Recv(socketThe, recvBytes,
                                     sizeWant, cancellationTokenSource.Token);
                                 if (cntTxfr != sizeWant)
@@ -310,8 +293,7 @@ static class Server
                                     break;
                                 }
                                 var fileName = Encoding.UTF8.GetString(recvBytes, 0, cntTxfr);
-                                //Log.Debug($"#{idCnn} > {fileSizeWant,10} '{fileName}'");
-                                Log.Verbose($"#{idCnn} > {fileName}");
+                                Log.Verbose("#{0} > '{1}'", idCnn, fileName);
 
                                 if (false == await byte16.As(0).Send(socketThe,
                                     cancellationTokenSource.Token))
@@ -321,7 +303,7 @@ static class Server
                                 }
 
                                 var outputRealFilename = ToOutputFilename(fileName);
-                                Log.Debug($"Real output file = '{outputRealFilename}'");
+                                Log.Debug("Real output file = '{0}'", outputRealFilename);
 
                                 var prefixShadowFilename = "rcopy2_"
                                 + Path.GetFileName(fileName)
@@ -335,7 +317,7 @@ static class Server
                                     outputShadowFilename = ToOutputFilename(
                                         prefixShadowFilename + $".{tryCnt}.tmp");
                                 }
-                                Log.Debug($"shadow file = '{outputShadowFilename}'");
+                                Log.Debug("shadow file = '{0}'", outputShadowFilename);
 
                                 fileSizeRecv = 0;
                                 int writeWantSize;
@@ -351,10 +333,11 @@ static class Server
                                         Task.WaitAll(writeTask, recvTask);
                                         writeRealResult = writeTask.Result;
                                         writeWantSize = recvTask.Result;
-                                        Log.Debug($"seq:{seqThe} writeDone:{writeRealResult}; writeWant:{writeWantSize}");
+                                        Log.Debug("seq:{0} writeDone:{1}; writeWant:{2}",
+                                            seqThe, writeRealResult, writeWantSize);
                                         if (1 > writeWantSize)
                                         {
-                                            Log.Debug($"Recv '{outputRealFilename}' is completed");
+                                            Log.Debug("Recv '{0}' is completed", outputRealFilename);
                                             break;
                                         }
                                         seqThe++;
@@ -365,7 +348,7 @@ static class Server
                                     }
                                 }
 
-                                cntFille += 1;
+                                cntFile += 1;
                                 sumSize += fileSizeRecv;
                                 //if (0 != fileSizeWant && fileSizeWant!= fileSizeRecv)
                                 //{
@@ -428,7 +411,8 @@ static class Server
                         }
                         finally
                         {
-                            Log.Ok($"#{idCnn} '{remoteEndPoint}' dropped (cntFile:{cntFille}; sumSize:{sumSize})");
+                            Log.Ok("#{0} '{1}' dropped (sent:{2}b)",
+                                idCnn, remoteEndPoint, sumSize);
                             await Task.Delay(20);
                             socketThe.Shutdown(SocketShutdown.Both);
                             await Task.Delay(20);

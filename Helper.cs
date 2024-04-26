@@ -1,6 +1,5 @@
 ﻿using System.Net;
 using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
 namespace rcopy2;
@@ -78,7 +77,6 @@ sealed class Byte2
         Socket socket, CancellationToken cancellation)
     {
         int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
-        //Console.WriteLine($"dbg:Byte2.Recv return {cntTxfr}b;0x{Data[1]:x2}.{Data[0]:x2}");
         if (cntTxfr != Length) return (false, 0);
         return (true, Value());
     }
@@ -87,7 +85,6 @@ sealed class Byte2
         Socket socket, CancellationToken cancellation)
     {
         int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
-        //Console.WriteLine($"dbg:Byte2.RecvBytes return {cntTxfr}b;0x{Data[1]:x2}.{Data[0]:x2}");
         if (cntTxfr != Length) return (false, 0, 0);
         return (true, Data[0], Data[1]);
     }
@@ -168,14 +165,71 @@ sealed class ClientQueue
     }
 }
 
-static class Log
+static internal class Log
 {
     static string TimeText() => DateTime.Now.ToString("HH:mm:ss.fff");
 
-    public static void Ok(string message)
+    internal enum LogType
     {
-        Console.WriteLine(
-            $"{TimeText()} {message}");
+        None,
+        Stdout,
+        Stderr,
+        Debugger,
+    }
+
+    static void LogNothing(bool isTimestamp, string format, params object[] args) { }
+
+    static void LogToStdout(bool isTimestamp, string format, params object[] args)
+    {
+        try
+        {
+            var message = string.Format(format, args);
+            if (isTimestamp)
+            {
+                Console.WriteLine(TimeText()+ " "+ message);
+            }
+            else
+            {
+                Console.WriteLine(message);
+            }
+        }
+        catch
+        {
+            // donting ..
+        }
+    }
+
+    static void LogToStderr(bool isTimestamp, string format, params object[] args)
+    {
+        try
+        {
+            var message = string.Format(format, args);
+            if (isTimestamp)
+            {
+                Console.Error.WriteLine(TimeText() + " " + message);
+            }
+            else
+            {
+                Console.Error.WriteLine(message);
+            }
+        }
+        catch
+        {
+            // donting ..
+        }
+    }
+
+    internal static LogType OkTo { get; private set; } = LogType.Stdout;
+    public static void Ok(string format, params object[] args)
+    {
+        if (OkTo == LogType.Stdout)
+        {
+            LogToStdout(false, format, args);
+        }
+        else if (OkTo == LogType.Stderr)
+        {
+            LogToStderr(false, format, args);
+        }
     }
 
     public static void Error(string message)
@@ -184,38 +238,49 @@ static class Log
             $"Error: {TimeText()} {message}");
     }
 
-    public static Action<string> Debug { get; internal set; }
-        = (_) => { };
+    internal static LogType DebugTo { get; private set; } = LogType.None;
+    public static void Debug(string format, params object[] args)
+    {
+        if (DebugTo == LogType.Stderr)
+        {
+            LogToStderr(true, format, args);
+        }
+        else if (OkTo == LogType.Debugger)
+        {
+            var message = string.Format(format, args);
+            System.Diagnostics.Debug.WriteLine(
+                $"{TimeText()} {message}");
+        }
+    }
 
-    public static Action<string> Verbose { get; internal set; }
-    = (_) => { };
+    internal static LogType VerboseTo { get; private set; } = LogType.None;
+    public static void Verbose(string format, params object[] args)
+    {
+        if (VerboseTo == LogType.Stderr)
+        {
+            LogToStderr(true, format, args);
+        }
+    }
 
     public static void Init()
     {
         if (System.Diagnostics.Debugger.IsAttached)
         {
-            Debug = (message) =>
-            System.Diagnostics.Debug
-            .WriteLine($"{TimeText()} {message}");
+            DebugTo = LogType.Debugger;
         }
         else
         {
             var tmp2 = Environment.GetEnvironmentVariable(nameof(rcopy2));
             if (tmp2?.Contains("debug:on") ?? false)
             {
-                Debug = (message) =>
-                Console.Error.WriteLine($"dbg: {TimeText()} {message}");
+                DebugTo = LogType.Stderr;
             }
         }
     }
 
     public static void VerboseSwitch(bool flag)
     {
-        if (flag)
-        {
-            Verbose = (message) =>
-            Console.WriteLine($"{TimeText()} {message}");
-        }
+        VerboseTo = flag ? LogType.Stderr : LogType.None;
     }
 }
 
@@ -273,8 +338,8 @@ static partial class Helper
               --allow       all      localhost | 192.168.0.* | =.=.=.* | 192.168.0.2
             where
               BufferSize:  1=8K, 2=16K, 3=32K, 4=64K
-              'localhost' at '--allow' to allow connecting at '127.0.0.1' or '[::1]'.
-              Star sign * at '--allow' to allow any digit of remote IP at the corresponding position.
+              'localhost'  at '--allow' to allow connecting at '127.0.0.1' or '[::1]'.
+              Star sign *  at '--allow' to allow any digit of remote IP at the corresponding position.
               Equal sign = at '--allow' to only allow same digit of local IP at the corresponding position.
             """);
         return false;
@@ -458,7 +523,7 @@ static partial class Helper
 
         return (ipLocal, ipRemote) =>
         {
-            Log.Debug($"IpMask(local='{ipLocal}',remote='{ipRemote}')");
+            Log.Debug("IpMask(local='{0}',remote='{1}')", ipLocal, ipRemote);
             if (ipLocal.StartsWith("[::1]:")) ipLocal = "127.0.0.1:1";
             if (ipRemote.StartsWith("[::1]:")) ipLocal = "127.0.0.1:2";
             var aa = (ipLocal

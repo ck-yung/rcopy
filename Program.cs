@@ -13,15 +13,15 @@ public class Program
         }
         catch (ArgumentException ae)
         {
-            Console.WriteLine($"Argument: {ae.Message}");
+            Log.Error($"Argument: {ae.Message}");
         }
         catch (SocketException se)
         {
-            Console.WriteLine($"Socket: {se.Message}");
+            Log.Error($"Socket: {se.Message}");
         }
         catch (Exception ee)
         {
-            Console.WriteLine(ee.ToString());
+            Log.Error(ee.ToString());
         }
     }
 
@@ -65,14 +65,14 @@ public class Program
 
         if (paths.Length > 1)
         {
-            Console.WriteLine($"Too many ('{paths[0]}','{paths[1]}') FILE!");
+            Log.Error($"Too many ('{paths[0]}','{paths[1]}') FILE!");
             return false;
         }
 
         var taskResult = Client.Run(ipTarget, new Info(paths[0], new FileInfo(paths[0])));
         taskResult.Wait();
 
-        if (1 > taskResult.Result) Console.WriteLine("No file is sent.");
+        if (1 > taskResult.Result) Log.Ok("No file is sent.");
         return taskResult.Result > 0;
     }
 }

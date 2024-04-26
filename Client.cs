@@ -18,23 +18,8 @@ static class Client
         {
             var byte16 = new Byte16();
 
-            //long tmp2 = new DateTimeOffset(info.File.LastWriteTimeUtc).ToUnixTimeSeconds();
-            //Log.Debug($"Send fileTime: 0x{tmp2:x}");
-            //if (false == await byte16.As(tmp2).Send(socket, cancellationTokenSource.Token))
-            //{
-            //    Log.Error($"Fail to send date-time");
-            //    return 0;
-            //}
-            //tmp2 = info.File.Length;
-            //if (false == await byte16.As(tmp2).Send(socket, cancellationTokenSource.Token))
-            //{
-            //    Log.Error($"Fail to send file-size");
-            //    return 0;
-            //}
-
             var bytesPath = Encoding.UTF8.GetBytes(info.Name);
             byte02.As(bytesPath.Length);
-            //Log.Ok($"dbg:Send name-size in 0x{byte02.Data[1]:x2}.{byte02.Data[0]:x2}");
             if (false == await byte02.Send(socket, cancellationTokenSource.Token))
             {
                 Log.Error($"Fail to send name-size");
@@ -74,7 +59,7 @@ static class Client
                     Log.Error($"Fail to send codeOfBuffer!");
                     return 0;
                 }
-                Log.Debug($"Send codeOfBuffer:0x{bufferCode:x} ok");
+                Log.Debug("Send codeOfBuffer:0x{0:x} ok", bufferCode);
             }
             else
             {
@@ -88,20 +73,21 @@ static class Client
                     Log.Error($"Fail to send last data-size {sizeToBeSent}b; 0x{sizeToBeSent:x}");
                     return 0;
                 }
-                Log.Debug($"Send last buffer size {sizeToBeSent}, 0x{sizeToBeSent:x} ok");
+                Log.Debug("Send last buffer size {0}, 0x{0} ok", sizeToBeSent);
             }
 
             var sendTask = Helper.Send(socketThe, buffer.OutputData(), sizeToBeSent,
                 cancellationTokenSource.Token);
             sendTask.Wait();
             int cntTxfr = sendTask.Result;
-            Log.Debug($"Send buffer want:{sizeToBeSent}b; real:{cntTxfr}b");
+            Log.Debug("Send buffer want:{0}b; real:{1}b", sizeToBeSent, cntTxfr);
 
             if (1 > cntTxfr) return 0;
             sentSizeThe += cntTxfr;
             (statusTxfr, var rsp16) = await byte16.Receive(socketThe,
                 cancellationTokenSource.Token);
-            Log.Debug($"Recv SendAndGetResponse: RSP msg (status:{statusTxfr}; RSP:{rsp16} (want:{sentSizeThe})");
+            Log.Debug("Recv SendAndGetResponse: RSP msg (status:{0}; RSP:{1} (want:{2})",
+                statusTxfr, rsp16, sentSizeThe);
             if ((false == statusTxfr) || (rsp16 != sentSizeThe))
             {
                 Log.Error($"RSP to SendAndGetResponse: (status:{statusTxfr}; RSP:{rsp16} but want:{sentSizeThe})");
@@ -113,7 +99,7 @@ static class Client
         long sumSent = 0;
         var endPointThe = ParseIpEndpoint(ipServer);
         var connectTimeout = new CancellationTokenSource(millisecondsDelay: 3000);
-        Log.Ok($"Connect {endPointThe.Address} at port {endPointThe.Port} ..");
+        Log.Ok("Connect {0} at port {1} ..", endPointThe.Address, endPointThe.Port);
         using var serverThe = new TcpClient();
         try
         {
@@ -137,12 +123,12 @@ static class Client
             }
 
             maxBufferSize = Helper.GetBufferSize(bufferCode);
-            Log.Debug($"Buffer code:{bufferCode} -> size:{maxBufferSize}b");
+            Log.Debug("Buffer code:{0} -> size:{1}b", bufferCode, maxBufferSize);
             buffer = new Buffer(maxBufferSize);
 
             foreach (var info in new Info[] {arg})
             {
-                Log.Verbose($"File> {arg.Name}");
+                Log.Verbose("File> '{0}'", arg.Name);
 
                 if (0 == await SendFileInfo(socketThe, arg))
                 {
@@ -171,10 +157,11 @@ static class Client
                         readRealSize = readTask.Result;
                         if (readRealSize == 0)
                         {
-                            Log.Debug($"{arg.Name} read is completed");
+                            Log.Debug("{0} read is completed", arg.Name);
                             break;
                         }
-                        Log.Debug($"{arg.Name} read {readRealSize}b and send.RSP:{sendTask.Result}");
+                        Log.Debug("{0} read {1}b and send.RSP:{2}",
+                            arg.Name, readRealSize, sendTask.Result);
 
                         buffer.Switch();
 
@@ -200,11 +187,11 @@ static class Client
                 cntFile += 1;
                 sumSent += sentSizeThe;
             }
-            Log.Debug($"sentCntFile:{cntFile}");
+            //Log.Debug($"sentCntFile:{cntFile}");
             serverThe.Client.Shutdown(SocketShutdown.Both);
             Task.Delay(20).Wait();
             serverThe.Client.Close();
-            Log.Ok($"Connection is closed (cntFile={cntFile}; sumSent={sumSent})");
+            Log.Ok("Connection is closed (sent={0}b)", sumSent);
             Task.Delay(20).Wait();
         }
         catch (SocketException se)
