@@ -41,37 +41,104 @@ sealed class Byte2
     public const int Length = 2;
     public readonly byte[] Data = new byte[2];
 
-    public Byte2 As(UInt16 uint16)
+    public Byte2 As(ushort uint2)
     {
-        Data[0] = (byte)(uint16 & 0xFF);
-        uint16 >>= 8;
-        Data[1] = (byte)(uint16 & 0xFF);
+        Data[0] = (byte)(uint2 & 0xFF);
+        uint2 >>= 8;
+        Data[1] = (byte)(uint2 & 0xFF);
         return this;
     }
 
-    public Byte2 As(int value)
+    public Byte2 As(short value)
     {
-        if (value > UInt16.MaxValue)
-        {
-            throw new OverflowException($"Cannot pack int:{value} to UInt16!");
-        }
-        return As((UInt16)value);
+        //if (value > ushort.MaxValue)
+        //{
+        //    throw new OverflowException($"Cannot pack int:{value} to UInt16!");
+        //}
+        return As((ushort)value);
     }
 
     public Byte2 As(byte low, byte high)
     {
-        return As(high * 256 + low);
+        return As((ushort)(high * 256 + low));
     }
 
-    public UInt16 Value()
+    public ushort Value()
     {
-        UInt16 rtn = Data[1];
+        ushort rtn = Data[1];
         rtn <<= 8;
         rtn += Data[0];
         return rtn;
     }
 
     public async Task<(bool Status, UInt16 Result)> Receive(
+        Socket socket, CancellationToken cancellation)
+    {
+        int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
+        if (cntTxfr != Length) return (false, 0);
+        return (true, Value());
+    }
+
+    public async Task<(bool Status, byte low, byte hight)> ReceiveBytes(
+        Socket socket, CancellationToken cancellation)
+    {
+        int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
+        if (cntTxfr != Length) return (false, 0, 0);
+        return (true, Data[0], Data[1]);
+    }
+
+    public async Task<bool> Send(Socket socket, CancellationToken cancellation)
+    {
+        int cntTxfr = await Helper.Send(socket, Data, Length, cancellation);
+        if (cntTxfr != Length) return false;
+        return true;
+    }
+}
+
+sealed class Byte8
+{
+    public const int Length = 4;
+    public readonly byte[] Data = new byte[4];
+
+    public Byte8 As(UInt32 uint4)
+    {
+        Data[0] = (byte)(uint4 & 0xFF);
+        uint4 >>= 8;
+        Data[1] = (byte)(uint4 & 0xFF);
+        uint4 >>= 8;
+        Data[2] = (byte)(uint4 & 0xFF);
+        uint4 >>= 8;
+        Data[3] = (byte)(uint4 & 0xFF);
+        return this;
+    }
+
+    public Byte8 As(Int32 value)
+    {
+        //if (value > ushort.MaxValue)
+        //{
+        //    throw new OverflowException($"Cannot pack int:{value} to UInt16!");
+        //}
+        return As((UInt32)value);
+    }
+
+    public Byte8 As(byte low, byte high)
+    {
+        return As((ushort)(high * 256 + low));
+    }
+
+    public Int32 Value()
+    {
+        Int32 rtn = Data[3];
+        rtn <<= 8;
+        rtn += Data[2];
+        rtn <<= 8;
+        rtn += Data[1];
+        rtn <<= 8;
+        rtn += Data[0];
+        return rtn;
+    }
+
+    public async Task<(bool Status, Int32 Result)> Receive(
         Socket socket, CancellationToken cancellation)
     {
         int cntTxfr = await Helper.Recv(socket, Data, Length, cancellation);
@@ -175,7 +242,7 @@ static internal class Log
         Debugger,
     }
 
-    static void LogNothing(bool isTimestamp, string format, params object[] args) { }
+    static void LogNothing(bool _1, string _2, params object[] _3) { }
 
     static void LogToStdout(bool isTimestamp, string format, params object[] args)
     {
@@ -284,19 +351,45 @@ static internal class Log
 
 static partial class Helper
 {
-    public const byte DefaultCodeOfBufferSize = 2;  // 16K
+    public const byte DefaultCodeOfBufferSize = 2;  // 32K
+
+    internal record BufferSize(byte Code, string Text, int Size, string String)
+    {
+        public override string ToString()
+        {
+            return $"{Code} => {String}";
+        }
+    }
+    internal static readonly List<BufferSize> InfoBufferSize =
+        [
+        new BufferSize(1, "1",  0x02000, "  8K"),
+        new BufferSize(2, "2",  0x08000, " 32K"),
+        new BufferSize(3, "3",  0x20000, "128K"),
+        new BufferSize(4, "4",  0x80000, "512K"),
+        new BufferSize(5, "5", 0x100000, "  1M"),
+        ];
 
     public static int GetBufferSize(byte code)
     {
-        return code switch
-        {
-            1 => 0x2000,// 8K
-            2 => 0x4000,// 16K
-            3 => 0x8000,// 32K
-            4 => 0x10000,// 64K
-            _ => throw new ArgumentOutOfRangeException(
-                                $"Invalid CodeOfBuffer:{code} is found!"),
-        };
+        var found = InfoBufferSize
+            .Where((it) => it.Code == code)
+            .FirstOrDefault();
+        return found == null
+            ? throw new ArgumentOutOfRangeException(
+                $"Invalid CodeOfBuffer:{code} is found!")
+            : found.Size;
+    }
+
+    public static byte GetBufferCode(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return DefaultCodeOfBufferSize;
+        var found = InfoBufferSize
+            .Where((it) => it.Text == text)
+            .FirstOrDefault();
+        return found == null
+            ? throw new ArgumentOutOfRangeException(
+                $"Invalid text of CodeOfBuffer:'{text}' is found!")
+            : found.Code;
     }
 
     static public bool PrintSyntax(bool isDetailed = false)
@@ -317,7 +410,7 @@ static partial class Helper
                 """);
             return false;
         }
-        Console.WriteLine("""
+        Console.WriteLine($"""
 
               where:
               HOST is 'localhost', an IPv4, or, a DNS host name
@@ -326,14 +419,22 @@ static partial class Helper
               NAME          DEFAULT  ALTER
               --keep-dir    on       off
               --verbose     off      on
-              --buffer-size 2        1  3  4
+              --buffer-size {DefaultCodeOfBufferSize}
               --allow       all      localhost | 192.168.0.* | =.=.=.* | 192.168.0.2
             where
-              BufferSize:  1=8K, 2=16K, 3=32K, 4=64K
               'localhost'  at '--allow' to allow connecting at '127.0.0.1' or '[::1]'.
               Star sign *  at '--allow' to allow any digit of remote IP at the corresponding position.
               Equal sign = at '--allow' to only allow same digit of local IP at the corresponding position.
             """);
+        Console.WriteLine("  Buffer-size :");
+        _ = InfoBufferSize
+            .Select((it, ndx) =>
+            {
+                Console.Write($"\t{it}");
+                if (ndx % 4 == 3) Console.WriteLine();
+                return 1;
+            })
+            .Count();
         return false;
     }
 

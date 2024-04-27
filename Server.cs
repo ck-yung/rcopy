@@ -59,16 +59,7 @@ static class Server
         byte codeOfBufferSize = Helper.DefaultCodeOfBufferSize;
         #region --buffer-size
         (var codeOfBufferText, argsRest) = Options.Parse("--buffer-size", argsRest);
-        codeOfBufferSize = codeOfBufferText switch
-        {
-            "" => Helper.DefaultCodeOfBufferSize,
-            "1" => 1, // 08K
-            "2" => 2, // 16K
-            "3" => 3, // 32K
-            "4" => 4, // 64K
-            _ => throw new ArgumentException(
-                                $"Value '{codeOfBufferText}' to '--buffer-size' is invalid."),
-        };
+        codeOfBufferSize = GetBufferCode(codeOfBufferText);
         #endregion
         var maxBufferSize = Helper.GetBufferSize(codeOfBufferSize);
         Log.Verbose("BufferSize code:{0} -> {1}; 0x{1:x}",
@@ -160,8 +151,10 @@ static class Server
                         long sumSize = 0;
                         byte tmp01 = 0;
                         UInt16 tmp02 = 0;
+                        Int32 tmp08 = 0;
                         var byte01 = new Byte1();
                         var byte02 = new Byte2();
+                        var byte08 = new Byte8();
                         var byte16 = new Byte16();
                         Buffer buffer = new(maxBufferSize);
                         try
@@ -195,20 +188,20 @@ static class Server
                                 else
                                 {
                                     Log.Debug("recv code-of-buffer:0x{0:x2}", tmp01);
-                                    (statusTxfr, tmp02) = await byte02.Receive(
+                                    (statusTxfr, tmp08) = await byte08.Receive(
                                         socketThe, cancellationTokenSource.Token);
                                     if (false == statusTxfr)
                                     {
                                         return -1;
                                     }
-                                    if (tmp02 > maxBufferSize)
+                                    if (tmp08 > maxBufferSize)
                                     {
-                                        Log.Error($"recv WRONG wantSize:{tmp02}b; 0x{tmp02:x}");
+                                        Log.Error($"recv WRONG wantSize:{tmp08}b; 0x{tmp08:x}");
                                         return -1;
                                     }
-                                    wantSize = tmp02;
+                                    wantSize = tmp08;
                                     Log.Debug("{0} recv wantSize:{1}b",
-                                        nameof(ReceiveAndSendResponse), tmp02);
+                                        nameof(ReceiveAndSendResponse), tmp08);
                                 }
 
                                 if (wantSize < 1)
@@ -286,12 +279,11 @@ static class Server
                                     break;
                                 }
 
-                                var outputRealFilename = string.Empty;
+                                var outputRealFilename = ToOutputFilename(fileName);
+                                var outputShadowFilename = outputRealFilename;
                                 var prefixShadowFilename = string.Empty;
-                                var outputShadowFilename = fileName;
-                                if ("-" != fileName)
+                                if ("-" != outputRealFilename)
                                 {
-                                    outputRealFilename = ToOutputFilename(fileName);
                                     Log.Debug("Real output file = '{0}'", outputRealFilename);
 
                                     prefixShadowFilename = "rcopy_"
@@ -350,7 +342,8 @@ static class Server
                                 {
                                     await Task.Run(async () =>
                                     {
-                                        if (File.Exists(outputShadowFilename))
+                                        if (File.Exists(outputShadowFilename) &&
+                                        (outputRealFilename != outputShadowFilename))
                                         {
                                             await Task.Delay(10);
                                             if (File.Exists(outputRealFilename))

@@ -10,6 +10,7 @@ static class Client
         var cancellationTokenSource = new CancellationTokenSource();
         var byte01 = new Byte1();
         var byte02 = new Byte2();
+        var byte08 = new Byte8();
         var byte16 = new Byte16();
         Buffer buffer;
 
@@ -19,7 +20,7 @@ static class Client
             var byte16 = new Byte16();
 
             var bytesPath = Encoding.UTF8.GetBytes(path);
-            byte02.As(bytesPath.Length);
+            byte02.As((ushort)bytesPath.Length);
             if (false == await byte02.Send(socket, cancellationTokenSource.Token))
             {
                 Log.Error($"Fail to send name-size");
@@ -45,8 +46,8 @@ static class Client
         }
 
         Socket socketThe;
-        long sentSizeThe = 0;
-        int wantSize = 0;
+        long sentSizeThe;
+        int wantSize;
         byte bufferCode;
         int maxBufferSize;
 
@@ -68,7 +69,7 @@ static class Client
                     Log.Error($"Fail to send last init code!");
                     return 0;
                 }
-                if (false == await byte02.As(sizeToBeSent).Send(socketThe, cancellationTokenSource.Token))
+                if (false == await byte08.As(sizeToBeSent).Send(socketThe, cancellationTokenSource.Token))
                 {
                     Log.Error($"Fail to send last data-size {sizeToBeSent}b; 0x{sizeToBeSent:x}");
                     return 0;
@@ -122,7 +123,7 @@ static class Client
                 return -1;
             }
 
-            maxBufferSize = Helper.GetBufferSize(bufferCode);
+            maxBufferSize = GetBufferSize(bufferCode);
             Log.Debug("Buffer code:{0} -> size:{1}b", bufferCode, maxBufferSize);
             buffer = new Buffer(maxBufferSize);
 
