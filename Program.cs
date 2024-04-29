@@ -67,6 +67,13 @@ public class Program
             return false;
         }
 
+        if (paths.Length < 1)
+        {
+            Log.Error($"Input FILE is required!");
+            return false;
+        }
+
+
         var taskResult = Client.Run(ipTarget, paths[0]);
         taskResult.Wait();
 
